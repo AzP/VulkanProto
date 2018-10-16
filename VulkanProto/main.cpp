@@ -86,7 +86,7 @@ struct vkinfo {
   vk::Instance inst;
   vk::CommandPool cmdPool;
   std::vector<vk::CommandBuffer> cmd;
-  uint32_t gfxQueueFamilyIdx, prsntQueueFamilyIdx;
+  uint32_t gfxQueueFamilyIdx{0}, prsntQueueFamilyIdx{0};
   vk::Queue gfxQueue;
   vk::Queue prsntQueue;
   vk::SwapchainKHR swapChain;
@@ -120,7 +120,7 @@ bool memory_type_from_properties(uint32_t typeBits,
                                  uint32_t& typeIndex)
 {
   // Search memtypes to find first index with those properties
-  for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; ++i) {
+  for (uint32_t i = 0; i < info.memoryProperties.memoryTypeCount; ++i) {
     if ((typeBits & 1) == 1) {
       // Type is available, does it match user properties?
       if ((info.memoryProperties.memoryTypes[i].propertyFlags & requirements_mask) == requirements_mask) {
@@ -196,10 +196,10 @@ int setupApplicationAndInstance()
     instance.destroy();
     return 1;
   }
+  info.surface = surface;
 
   return 0;
 }
-
 
 int setupDevicesAndQueues()
 {
@@ -213,6 +213,9 @@ int setupDevicesAndQueues()
     info.inst.destroy();
     return 1;
   }
+
+  // Setup the gpu memory properties
+  info.memoryProperties = info.gpu.getMemoryProperties();
 
   /* Call with nullptr data to get count */
   auto queueFamilyProps = info.gpu.getQueueFamilyProperties();
@@ -343,7 +346,7 @@ int setupSwapChains()
   auto imageViewCreateInfo = vk::ImageViewCreateInfo()
     .setViewType(vk::ImageViewType::e2D)
     .setFormat(format.at(0).format)
-    .setSubresourceRange(vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 0));
+    .setSubresourceRange(vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
 
   // Initialize the images using the same info
   for (uint32_t i = 0u; i < swapChainImages.size(); ++i)
