@@ -41,9 +41,26 @@ Create and destroy a Vulkan surface on an SDL window.
 
 #include <iostream>
 #include <vector>
+#include <sstream>
 
 #undef min
 #undef max
+
+#ifdef WIN32
+// Class for redirecting cout to Visual Studio output window
+class dbg_stream_for_cout : public std::stringbuf
+{
+public:
+  ~dbg_stream_for_cout() { sync(); }
+  int sync()
+  {
+    ::OutputDebugStringA(str().c_str());
+    str(std::string()); // Clear the string buffer
+    return 0;
+  }
+};
+dbg_stream_for_cout g_DebugStreamFor_cout;
+#endif
 
 struct vkDepth
 {
@@ -123,7 +140,7 @@ int setupApplicationAndInstance()
   std::vector<const char*> extensions = getAvailableWSIExtensions();
   std::vector<const char*> layers;
   //#if defined(_DEBUG)
-  layers.push_back("VK_LAYER_LUNARG_standard_validation");
+  layers.push_back("VK_LAYER_LUNARG_standard_validation"); 
   //#endif
 
   // vk::ApplicationInfo allows the programmer to specifiy some basic information about the
@@ -329,7 +346,7 @@ int setupSwapChains()
     .setSubresourceRange(vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 0));
 
   // Initialize the images using the same info
-  for (size_t i = 0u; i < swapChainImages.size(); ++i)
+  for (uint32_t i = 0u; i < swapChainImages.size(); ++i)
   {
     imageViewCreateInfo.setImage(swapChainImages[i]);
     info.buffers[i].image = swapChainImages[i];
@@ -379,6 +396,10 @@ int setupDepth()
 
 int main()
 {
+#ifdef WIN32
+  std::cout.rdbuf(&g_DebugStreamFor_cout); // Redirect std::cout to OutputDebugString!
+#endif
+
   setupApplicationAndInstance();
   setupDevicesAndQueues();
   setupSwapChains();
@@ -408,9 +429,9 @@ int main()
 
   // Clean up.
   info.inst.destroySurfaceKHR(info.surface);
+  info.inst.destroy();
   SDL_DestroyWindow(sdlinfo.window);
   SDL_Quit();
-  info.inst.destroy();
 
   return 0;
 }
@@ -430,15 +451,6 @@ vk::SurfaceKHR createVulkanSurface(const vk::Instance& instance, SDL_Window* win
       vk::AndroidSurfaceCreateInfoKHR surfaceInfo = vk::AndroidSurfaceCreateInfoKHR()
         .setWindow(windowInfo.info.android.window);
       return instance.createAndroidSurfaceKHR(surfaceInfo);
-    }
-#endif
-
-#if defined(SDL_VIDEO_DRIVER_MIR) && defined(VK_USE_PLATFORM_MIR_KHR)
-    case SDL_SYSWM_MIR: {
-      vk::MirSurfaceCreateInfoKHR surfaceInfo = vk::MirSurfaceCreateInfoKHR()
-        .setConnection(windowInfo.info.mir.connection)
-        .setMirSurface(windowInfo.info.mir.surface);
-      return instance.createMirSurfaceKHR(surfaceInfo);
     }
 #endif
 
@@ -481,8 +493,6 @@ std::vector<const char*> getAvailableWSIExtensions()
 
 #if defined(VK_USE_PLATFORM_ANDROID_KHR)
   extensions.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
-#elif defined(VK_USE_PLATFORM_MIR_KHR)
-  extensions.push_back(VK_KHR_MIR_SURFACE_EXTENSION_NAME);
 #elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
   extensions.push_back(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
 #elif defined(VK_USE_PLATFORM_WIN32_KHR)
