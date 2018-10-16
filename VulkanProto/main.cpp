@@ -92,6 +92,7 @@ struct vkinfo {
   vk::SwapchainKHR swapChain;
   std::vector<SwapchainBuffers> buffers;
   vk::PhysicalDeviceMemoryProperties memoryProperties;
+  vk::PhysicalDeviceProperties deviceProperties;
   vkDepth depth;
 } info;
 
@@ -216,6 +217,7 @@ int setupDevicesAndQueues()
 
   // Setup the gpu memory properties
   info.memoryProperties = info.gpu.getMemoryProperties();
+  info.deviceProperties = info.gpu.getProperties();
 
   /* Call with nullptr data to get count */
   auto queueFamilyProps = info.gpu.getQueueFamilyProperties();
