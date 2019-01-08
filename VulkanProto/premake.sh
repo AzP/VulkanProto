@@ -1,1 +1,1 @@
-premake4 --os=linux --cc=gcc gmake premake4.lua
+premake5 --os=linux --cc=gcc gmake premake5.lua
