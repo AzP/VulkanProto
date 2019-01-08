@@ -21,7 +21,7 @@ solution "VulkanProto"
 
 		configuration "linux"
 			libdirs {"/usr/lib", "/usr/local/lib"}
-			includedirs {"/usr/include", "/usr/include/SDL2", "/usr/include/vulkan/", "/usr/include/freetype2", "/usr/include/tmxparser/"}
+			includedirs {"/usr/include", "/usr/include/SDL2", "/usr/include/vulkan/"}
 		
 		configuration "Debug"
 			targetname ("VulkanProto-debug")
@@ -29,10 +29,10 @@ solution "VulkanProto"
 			symbols "On"
 			warnings "Extra"
 			configuration "windows"
-				links {"vulkan","DevIL","ILU","ILUT","SDL2","SDL2main","freetype264d","tmxparser"}
+				links {"vulkan","SDL2"}
 				-- disablewarnings { "4668;4201;4290;4522" } -- Not yet supported in premake4
 			configuration "linux"
-				links {"vulkan","IL","ILU","SDL2","ubsan","freetype"}
+				links {"vulkan","SDL2","ubsan"}
 				buildoptions{ "-std=c++17 -Wpedantic -Wall -g3 -O0 -Wextra -fsanitize=undefined -fno-sanitize-recover -fsanitize=shift -fsanitize=integer-divide-by-zero -fsanitize=unreachable -fsanitize=vla-bound -fsanitize=null -fsanitize=return -fsanitize=signed-integer-overflow -fsanitize=bounds -fsanitize=alignment -fsanitize=object-size -fsanitize=float-divide-by-zero -fsanitize=float-cast-overflow -fsanitize=nonnull-attribute -fsanitize=returns-nonnull-attribute -fsanitize=bool -fsanitize=enum -fsanitize=vptr" }
 
 		configuration "Release"
@@ -41,10 +41,10 @@ solution "VulkanProto"
 			warnings "Extra"
 			optimize "On"
 			configuration "windows"
-				links {"vulkan","DevIL","ILU","ILUT","SDL2","SDL2main","freetype264d","tmxparser"}
+				links {"vulkan","SDL2"}
 				-- undefines{ "_UNICODE" }
 				-- disablewarnings { "4668;4201;4290;4522" }
 			configuration "linux"
-				links {"vulkan","IL","ILU","SDL2","ubsan","freetype"}
+				links {"vulkan","SDL2","ubsan"}
 				buildoptions{ "-std=c++17 -Wpedantic -Wall -Wextra -fsanitize=undefined -fno-sanitize-recover -fsanitize=shift -fsanitize=integer-divide-by-zero -fsanitize=unreachable -fsanitize=vla-bound -fsanitize=null -fsanitize=return -fsanitize=signed-integer-overflow -fsanitize=bounds -fsanitize=alignment -fsanitize=object-size -fsanitize=float-divide-by-zero -fsanitize=float-cast-overflow -fsanitize=nonnull-attribute -fsanitize=returns-nonnull-attribute -fsanitize=bool -fsanitize=enum -fsanitize=vptr" }
 
