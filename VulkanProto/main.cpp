@@ -98,6 +98,8 @@ struct vkinfo
   vk::PhysicalDeviceMemoryProperties memoryProperties;
   vk::PhysicalDeviceProperties deviceProperties;
   vkDepth depth;
+  std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
+  vk::PipelineLayout pipelineLayout;
 } info;
 
 struct sdlinfo
@@ -430,6 +432,38 @@ int setupUniformBuffer(void* data, size_t size)
   return 0;
 }
 
+int setupDescriptorSet()
+{
+  // Number of descriptor sets
+  const auto numOfDescriptors = 1;
+  // Create a layout binding for a uniform buffer used in vertex shader
+  const auto layoutBinding = vk::DescriptorSetLayoutBinding()
+    .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+    .setDescriptorCount(numOfDescriptors)
+    .setStageFlags(vk::ShaderStageFlagBits::eVertex);
+  const auto descriptorLayoutCreateInfo = vk::DescriptorSetLayoutCreateInfo()
+    .setBindingCount(1)
+    .setPBindings(&layoutBinding);
+  // Create descriptorLayout and save it in info object
+  const auto descriptorSetLayout = info.device.createDescriptorSetLayout(descriptorLayoutCreateInfo);
+  info.descriptorSetLayouts.push_back(descriptorSetLayout);
+
+  const auto pipelineLayoutCreateInfo = vk::PipelineLayoutCreateInfo()
+    .setSetLayoutCount(numOfDescriptors)
+    .setPSetLayouts(&descriptorSetLayout);
+  info.pipelineLayout = info.device.createPipelineLayout(pipelineLayoutCreateInfo);
+
+  /*
+  In GLSL:
+   layout (set=M, binding=N) uniform sampler2D variableNameArray[I];
+
+    M refers the the M'th descriptor set layout in the pSetLayouts member of the pipeline layout
+    N refers to the N'th descriptor set (binding) in M's pBindings member of the descriptor set layout
+    I is the index into the array of descriptors in N's descriptor set
+  */
+  return 0;
+}
+
 int main()
 {
 #ifdef WIN32
@@ -454,6 +488,8 @@ int main()
   const auto mvp = clip * proj * view * model;
 
   setupUniformBuffer((void*)&mvp, sizeof(mvp));
+
+  setupDescriptorSet();
 
   // Poll for user input.
   bool stillRunning = true;
