@@ -35,6 +35,8 @@ Create and destroy a Vulkan surface on an SDL window.
 #define SDL_MAIN_HANDLED
 
 #include <glm/glm.hpp>
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_transform.hpp>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_syswm.h>
 #include <vulkan/vulkan.hpp>
@@ -70,14 +72,16 @@ struct vkDepth
   vk::Format format;
 };
 
-struct SwapchainBuffers {
+struct SwapchainBuffers
+{
   vk::Image image;
   vk::CommandBuffer cmd;
   vk::CommandBuffer graphics_to_present_cmd;
   vk::ImageView view;
 };
 
-struct vkinfo {
+struct vkinfo
+{
   std::vector<vk::PhysicalDevice> gpus;
   vk::PhysicalDevice gpu;
   vk::Device device;
@@ -86,7 +90,7 @@ struct vkinfo {
   vk::Instance inst;
   vk::CommandPool cmdPool;
   std::vector<vk::CommandBuffer> cmd;
-  uint32_t gfxQueueFamilyIdx{0}, prsntQueueFamilyIdx{0};
+  uint32_t gfxQueueFamilyIdx{ 0 }, prsntQueueFamilyIdx{ 0 };
   vk::Queue gfxQueue;
   vk::Queue prsntQueue;
   vk::SwapchainKHR swapChain;
@@ -96,18 +100,19 @@ struct vkinfo {
   vkDepth depth;
 } info;
 
-struct sdlinfo {
+struct sdlinfo
+{
   SDL_Window* window;
 } sdlinfo;
 
 vk::PresentModeKHR getPresentMode(const vk::SurfaceKHR& surface, const vk::PhysicalDevice& gpu)
 {
   auto modes = gpu.getSurfacePresentModesKHR(surface);
-  if (modes.size() == 1)
+  if(modes.size() == 1)
     return modes.at(0);
 
-  for (const auto& mode : modes)
-    if (mode == vk::PresentModeKHR::eMailbox)
+  for(const auto& mode : modes)
+    if(mode == vk::PresentModeKHR::eMailbox)
       return mode;
 
   return vk::PresentModeKHR::eFifo;
@@ -121,10 +126,10 @@ bool memory_type_from_properties(uint32_t typeBits,
                                  uint32_t& typeIndex)
 {
   // Search memtypes to find first index with those properties
-  for (uint32_t i = 0; i < info.memoryProperties.memoryTypeCount; ++i) {
-    if ((typeBits & 1) == 1) {
+  for(uint32_t i = 0; i < info.memoryProperties.memoryTypeCount; ++i) {
+    if((typeBits & 1) == 1) {
       // Type is available, does it match user properties?
-      if ((info.memoryProperties.memoryTypes[i].propertyFlags & requirements_mask) == requirements_mask) {
+      if((info.memoryProperties.memoryTypes[i].propertyFlags & requirements_mask) == requirements_mask) {
         typeIndex = i;
         return true;
       }
@@ -141,7 +146,7 @@ int setupApplicationAndInstance()
   std::vector<const char*> extensions = getAvailableWSIExtensions();
   std::vector<const char*> layers;
   //#if defined(_DEBUG)
-  layers.push_back("VK_LAYER_LUNARG_standard_validation"); 
+  layers.push_back("VK_LAYER_LUNARG_standard_validation");
   //#endif
 
   // vk::ApplicationInfo allows the programmer to specifiy some basic information about the
@@ -168,20 +173,20 @@ int setupApplicationAndInstance()
   try {
     instance = vk::createInstance(instInfo);
   }
-  catch (const std::exception& e) {
+  catch(const std::exception& e) {
     std::cout << "Could not create a Vulkan instance: " << e.what() << std::endl;
     return 1;
   }
   info.inst = instance;
 
   // Create an SDL window that supports Vulkan and OpenGL rendering.
-  if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+  if(SDL_Init(SDL_INIT_VIDEO) != 0) {
     std::cout << "Could not initialize SDL." << std::endl;
     return 1;
   }
   SDL_Window* window = SDL_CreateWindow("Vulkan Window", SDL_WINDOWPOS_CENTERED,
                                         SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL);
-  if (window == NULL) {
+  if(window == NULL) {
     std::cout << "Could not create SDL window." << std::endl;
     return 1;
   }
@@ -192,7 +197,7 @@ int setupApplicationAndInstance()
   try {
     surface = createVulkanSurface(instance, window);
   }
-  catch (const std::exception& e) {
+  catch(const std::exception& e) {
     std::cout << "Failed to create Vulkan surface: " << e.what() << std::endl;
     instance.destroy();
     return 1;
@@ -209,7 +214,7 @@ int setupDevicesAndQueues()
     info.gpus = info.inst.enumeratePhysicalDevices();
     info.gpu = info.gpus[0];
   }
-  catch (const std::exception& e) {
+  catch(const std::exception& e) {
     std::cout << "No physical devices found: " << e.what() << std::endl;
     info.inst.destroy();
     return 1;
@@ -225,19 +230,19 @@ int setupDevicesAndQueues()
   // Create the device and queues
   // Iterate over each queue to learn whether it supports presenting:
   std::vector<vk::Bool32> supportsPresent(queueFamilyProps.size());
-  for (uint32_t i = 0; i < queueFamilyProps.size(); ++i) {
+  for(uint32_t i = 0; i < queueFamilyProps.size(); ++i) {
     info.gpu.getSurfaceSupportKHR(i, info.surface, &supportsPresent[i]);
   }
 
   uint32_t graphicsQueueFamilyIndex = UINT32_MAX;
   uint32_t presentQueueFamilyIndex = UINT32_MAX;
-  for (uint32_t i = 0; i < queueFamilyProps.size(); ++i) {
-    if (queueFamilyProps[i].queueFlags & vk::QueueFlagBits::eGraphics) {
-      if (graphicsQueueFamilyIndex == UINT32_MAX) {
+  for(uint32_t i = 0; i < queueFamilyProps.size(); ++i) {
+    if(queueFamilyProps[i].queueFlags & vk::QueueFlagBits::eGraphics) {
+      if(graphicsQueueFamilyIndex == UINT32_MAX) {
         graphicsQueueFamilyIndex = i;
       }
 
-      if (supportsPresent[i] == VK_TRUE) {
+      if(supportsPresent[i] == VK_TRUE) {
         graphicsQueueFamilyIndex = i;
         presentQueueFamilyIndex = i;
         break;
@@ -245,11 +250,11 @@ int setupDevicesAndQueues()
     }
   }
 
-  if (presentQueueFamilyIndex == UINT32_MAX) {
+  if(presentQueueFamilyIndex == UINT32_MAX) {
     // If didn't find a queue that supports both graphics and present,
     // then find a separate present queue.
-    for (uint32_t i = 0; i < queueFamilyProps.size(); ++i) {
-      if (supportsPresent[i] == VK_TRUE) {
+    for(uint32_t i = 0; i < queueFamilyProps.size(); ++i) {
+      if(supportsPresent[i] == VK_TRUE) {
         presentQueueFamilyIndex = i;
         break;
       }
@@ -257,7 +262,7 @@ int setupDevicesAndQueues()
   }
 
   // Generate error if could not find both a graphics and a present queue
-  if (graphicsQueueFamilyIndex == UINT32_MAX || presentQueueFamilyIndex == UINT32_MAX) {
+  if(graphicsQueueFamilyIndex == UINT32_MAX || presentQueueFamilyIndex == UINT32_MAX) {
     std::cout << "Could not find both graphics and present queues" << std::endl;
     info.inst.destroy();
     return 1;
@@ -283,7 +288,7 @@ int setupDevicesAndQueues()
   try {
     info.device = info.gpus[0].createDevice(createInfo);
   }
-  catch (const std::exception& e) {
+  catch(const std::exception& e) {
     std::cout << "Unable to create vkDevice: " << e.what() << std::endl;
     info.inst.destroy();
     return 1;
@@ -329,7 +334,7 @@ int setupSwapChains()
     .setOldSwapchain(oldSwapChain);
 
   // If indices are separate for gfx and present, we need to handle it
-  if (info.gfxQueue != info.prsntQueue)
+  if(info.gfxQueue != info.prsntQueue)
   {
     std::vector<uint32_t> indices = { info.gfxQueueFamilyIdx, info.prsntQueueFamilyIdx };
     swapchainCreateInfo.setImageSharingMode(vk::SharingMode::eConcurrent)
@@ -340,7 +345,7 @@ int setupSwapChains()
 
   // Create the swapchain, clear old one, and create images and imageviews
   info.swapChain = info.device.createSwapchainKHR(swapchainCreateInfo);
-  if (oldSwapChain)
+  if(oldSwapChain)
     info.device.destroySwapchainKHR(oldSwapChain);
 
   auto swapChainImages = info.device.getSwapchainImagesKHR(info.swapChain);
@@ -351,7 +356,7 @@ int setupSwapChains()
     .setSubresourceRange(vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
 
   // Initialize the images using the same info
-  for (uint32_t i = 0u; i < swapChainImages.size(); ++i)
+  for(uint32_t i = 0u; i < swapChainImages.size(); ++i)
   {
     imageViewCreateInfo.setImage(swapChainImages[i]);
     info.buffers[i].image = swapChainImages[i];
@@ -399,6 +404,32 @@ int setupDepth()
   return 0;
 }
 
+int setupUniformBuffer(void* data, size_t size)
+{
+  const auto buf_info = vk::BufferCreateInfo()
+    .setUsage(vk::BufferUsageFlagBits::eUniformBuffer)
+    .setSize(size);
+  const auto buffer = info.device.createBuffer(buf_info); // Create buffer object
+
+  // We need memory requirements from the GPU to allocate uniform buffer memory
+  auto memReqs = info.device.getBufferMemoryRequirements(buffer);
+  auto memAllocInfo = vk::MemoryAllocateInfo()
+    .setAllocationSize(memReqs.size)
+    .setMemoryTypeIndex(0);
+  const auto pass = memory_type_from_properties(memReqs.memoryTypeBits,
+                                                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                                                memAllocInfo.memoryTypeIndex);
+  const auto memory = info.device.allocateMemory(memAllocInfo);
+
+  // Write the actual uniform data to the buffer
+  const auto buf_data = info.device.mapMemory(memory, 0, memReqs.size);
+  memcpy(buf_data, data, size);
+  info.device.unmapMemory(memory); // Unmap the memory buffer ASAP
+  info.device.bindBufferMemory(buffer, memory, 0); // Associate the allocated memory with the buffer object
+
+  return 0;
+}
+
 int main()
 {
 #ifdef WIN32
@@ -410,22 +441,36 @@ int main()
   setupSwapChains();
   setupDepth();
 
-    // Poll for user input.
+  const auto proj = glm::perspective(glm::radians(45.0f), 1.0f, 0.1f, 100.0f);
+  const auto view = glm::lookAt(glm::vec3(-5, 3, -10), // Camera is at (-5,3,-10), in World Space
+                                glm::vec3(0, 0, 0),    // and looks at the origin
+                                glm::vec3(0, -1, 0));  // Head is up (set to 0,-1,0 to look upside-down)
+  const auto model = glm::mat4(1.0f);
+  // Vulkan clip space has inverted Y and half Z.
+  const auto clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f,
+                              0.0f, -1.0f, 0.0f, 0.0f,
+                              0.0f, 0.0f, 0.5f, 0.0f,
+                              0.0f, 0.0f, 0.5f, 1.0f);
+  const auto mvp = clip * proj * view * model;
+
+  setupUniformBuffer((void*)&mvp, sizeof(mvp));
+
+  // Poll for user input.
   bool stillRunning = true;
-  while (stillRunning) {
+  while(stillRunning) {
 
     SDL_Event event;
-    while (SDL_PollEvent(&event)) {
+    while(SDL_PollEvent(&event)) {
 
-      switch (event.type) {
+      switch(event.type) {
 
-        case SDL_QUIT:
-          stillRunning = false;
-          break;
+      case SDL_QUIT:
+        stillRunning = false;
+        break;
 
-        default:
-            // Do nothing.
-          break;
+      default:
+        // Do nothing.
+        break;
       }
     }
 
@@ -445,50 +490,54 @@ vk::SurfaceKHR createVulkanSurface(const vk::Instance& instance, SDL_Window* win
 {
   SDL_SysWMinfo windowInfo;
   SDL_VERSION(&windowInfo.version);
-  if (!SDL_GetWindowWMInfo(window, &windowInfo)) {
+  if(!SDL_GetWindowWMInfo(window, &windowInfo)) {
     throw std::system_error(std::error_code(), "SDK window manager info is not available.");
   }
 
-  switch (windowInfo.subsystem) {
+  switch(windowInfo.subsystem) {
 
 #if defined(SDL_VIDEO_DRIVER_ANDROID) && defined(VK_USE_PLATFORM_ANDROID_KHR)
-    case SDL_SYSWM_ANDROID: {
-      vk::AndroidSurfaceCreateInfoKHR surfaceInfo = vk::AndroidSurfaceCreateInfoKHR()
-        .setWindow(windowInfo.info.android.window);
-      return instance.createAndroidSurfaceKHR(surfaceInfo);
-    }
+  case SDL_SYSWM_ANDROID:
+  {
+    vk::AndroidSurfaceCreateInfoKHR surfaceInfo = vk::AndroidSurfaceCreateInfoKHR()
+      .setWindow(windowInfo.info.android.window);
+    return instance.createAndroidSurfaceKHR(surfaceInfo);
+  }
 #endif
 
 #if defined(SDL_VIDEO_DRIVER_WAYLAND) && defined(VK_USE_PLATFORM_WAYLAND_KHR)
-    case SDL_SYSWM_WAYLAND: {
-      vk::WaylandSurfaceCreateInfoKHR surfaceInfo = vk::WaylandSurfaceCreateInfoKHR()
-        .setDisplay(windowInfo.info.wl.display)
-        .setSurface(windowInfo.info.wl.surface);
-      return instance.createWaylandSurfaceKHR(surfaceInfo);
-}
+  case SDL_SYSWM_WAYLAND:
+  {
+    vk::WaylandSurfaceCreateInfoKHR surfaceInfo = vk::WaylandSurfaceCreateInfoKHR()
+      .setDisplay(windowInfo.info.wl.display)
+      .setSurface(windowInfo.info.wl.surface);
+    return instance.createWaylandSurfaceKHR(surfaceInfo);
+  }
 #endif
 
 #if defined(SDL_VIDEO_DRIVER_WINDOWS) && defined(VK_USE_PLATFORM_WIN32_KHR)
-    case SDL_SYSWM_WINDOWS: {
-      vk::Win32SurfaceCreateInfoKHR surfaceInfo = vk::Win32SurfaceCreateInfoKHR()
-        .setHinstance(GetModuleHandle(NULL))
-        .setHwnd(windowInfo.info.win.window);
-      return instance.createWin32SurfaceKHR(surfaceInfo);
-    }
+  case SDL_SYSWM_WINDOWS:
+  {
+    vk::Win32SurfaceCreateInfoKHR surfaceInfo = vk::Win32SurfaceCreateInfoKHR()
+      .setHinstance(GetModuleHandle(NULL))
+      .setHwnd(windowInfo.info.win.window);
+    return instance.createWin32SurfaceKHR(surfaceInfo);
+  }
 #endif
 
 #if defined(SDL_VIDEO_DRIVER_X11) && defined(VK_USE_PLATFORM_XLIB_KHR)
-    case SDL_SYSWM_X11: {
-      vk::XlibSurfaceCreateInfoKHR surfaceInfo = vk::XlibSurfaceCreateInfoKHR()
-        .setDpy(windowInfo.info.x11.display)
-        .setWindow(windowInfo.info.x11.window);
-      return instance.createXlibSurfaceKHR(surfaceInfo);
-    }
+  case SDL_SYSWM_X11:
+  {
+    vk::XlibSurfaceCreateInfoKHR surfaceInfo = vk::XlibSurfaceCreateInfoKHR()
+      .setDpy(windowInfo.info.x11.display)
+      .setWindow(windowInfo.info.x11.window);
+    return instance.createXlibSurfaceKHR(surfaceInfo);
+  }
 #endif
 
-    default:
-      throw std::system_error(std::error_code(), "Unsupported window manager is in use.");
-    }
+  default:
+    throw std::system_error(std::error_code(), "Unsupported window manager is in use.");
+  }
 }
 
 std::vector<const char*> getAvailableWSIExtensions()
