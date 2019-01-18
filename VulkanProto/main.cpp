@@ -80,6 +80,13 @@ struct SwapchainBuffers
   vk::ImageView view;
 };
 
+struct UniformData
+{
+  VkBuffer buf;
+  VkDeviceMemory mem;
+  VkDescriptorBufferInfo bufferInfo;
+};
+
 struct vkinfo
 {
   std::vector<vk::PhysicalDevice> gpus;
@@ -100,6 +107,10 @@ struct vkinfo
   vkDepth depth;
   std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
   vk::PipelineLayout pipelineLayout;
+
+  UniformData uniformData;
+  vk::DescriptorPool descriptorPool;
+  std::vector<vk::DescriptorSet> descriptorSets;
 } info;
 
 struct sdlinfo
@@ -429,10 +440,16 @@ int setupUniformBuffer(void* data, size_t size)
   info.device.unmapMemory(memory); // Unmap the memory buffer ASAP
   info.device.bindBufferMemory(buffer, memory, 0); // Associate the allocated memory with the buffer object
 
+  // Save buffer info for later access
+  info.uniformData.buf = buffer;
+  info.uniformData.bufferInfo.buffer = info.uniformData.buf;
+  info.uniformData.bufferInfo.offset = 0;
+  info.uniformData.bufferInfo.range = size;
+
   return 0;
 }
 
-int setupDescriptorSet()
+int setupDescriptorSetLayoutAndPipelineLayout()
 {
   // Number of descriptor sets
   const auto numOfDescriptors = 1;
@@ -461,6 +478,40 @@ int setupDescriptorSet()
     N refers to the N'th descriptor set (binding) in M's pBindings member of the descriptor set layout
     I is the index into the array of descriptors in N's descriptor set
   */
+
+  return 0;
+}
+
+int setupDescriptorSetPool()
+{
+  const auto typeCount = vk::DescriptorPoolSize()
+    .setType(vk::DescriptorType::eUniformBuffer)
+    .setDescriptorCount(1);
+  const auto descriptorPoolCreateInfo = vk::DescriptorPoolCreateInfo()
+    .setMaxSets(1)
+    .setPoolSizeCount(1)
+    .setPPoolSizes(&typeCount);
+  info.descriptorPool = info.device.createDescriptorPool(descriptorPoolCreateInfo);
+
+  return 0;
+}
+
+int allocateDescriptorSet()
+{
+  const auto allocInfo = vk::DescriptorSetAllocateInfo()
+    .setDescriptorPool(info.descriptorPool)
+    .setDescriptorSetCount(info.descriptorSetLayouts.size())
+    .setPSetLayouts(info.descriptorSetLayouts.data());
+  info.descriptorSets = info.device.allocateDescriptorSets(allocInfo);
+
+  const auto writes = std::vector<vk::WriteDescriptorSet>{ vk::WriteDescriptorSet()
+    .setDstSet(info.descriptorSets.front())
+    .setDescriptorCount(info.descriptorSets.size())
+    .setDescriptorType(vk::DescriptorType::eUniformBuffer)
+    .setPBufferInfo((const vk::DescriptorBufferInfo*)&info.uniformData.bufferInfo) };
+  // Copy the VkDescriptorBufferInfo into the descriptor (the device)
+  info.device.updateDescriptorSets(writes, nullptr);
+
   return 0;
 }
 
@@ -489,7 +540,9 @@ int main()
 
   setupUniformBuffer((void*)&mvp, sizeof(mvp));
 
-  setupDescriptorSet();
+  setupDescriptorSetLayoutAndPipelineLayout();
+  setupDescriptorSetPool();
+  allocateDescriptorSet();
 
   // Poll for user input.
   bool stillRunning = true;
