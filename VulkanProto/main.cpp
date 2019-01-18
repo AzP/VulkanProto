@@ -64,7 +64,7 @@ public:
 dbg_stream_for_cout g_DebugStreamFor_cout;
 #endif
 
-struct vkDepth
+struct DepthData
 {
   vk::Image image;
   vk::DeviceMemory mem;
@@ -95,22 +95,31 @@ struct vkinfo
   vk::SurfaceKHR surface;
   vk::SurfaceCapabilitiesKHR surfaceCapabilities;
   vk::Instance inst;
+
   vk::CommandPool cmdPool;
-  std::vector<vk::CommandBuffer> cmd;
+  std::vector<vk::CommandBuffer> cmdBuffers;
+
   uint32_t gfxQueueFamilyIdx{ 0 }, prsntQueueFamilyIdx{ 0 };
   vk::Queue gfxQueue;
   vk::Queue prsntQueue;
+
   vk::SwapchainKHR swapChain;
-  std::vector<SwapchainBuffers> buffers;
+  vk::Format surfaceFormat;
+  std::vector<SwapchainBuffers> swapchainBuffers;
+
   vk::PhysicalDeviceMemoryProperties memoryProperties;
   vk::PhysicalDeviceProperties deviceProperties;
-  vkDepth depth;
+
+  DepthData depth;
+
   std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
   vk::PipelineLayout pipelineLayout;
 
   UniformData uniformData;
   vk::DescriptorPool descriptorPool;
   std::vector<vk::DescriptorSet> descriptorSets;
+
+  vk::RenderPass renderPass;
 } info;
 
 struct sdlinfo
@@ -318,7 +327,7 @@ int setupDevicesAndQueues()
   const auto cmdBufAllocInfo = vk::CommandBufferAllocateInfo()
     .setCommandBufferCount(1)
     .setCommandPool(info.cmdPool);
-  info.cmd = info.device.allocateCommandBuffers(cmdBufAllocInfo);
+  info.cmdBuffers = info.device.allocateCommandBuffers(cmdBufAllocInfo);
 
   return 0;
 }
@@ -327,12 +336,12 @@ int setupSwapChains()
 {
   // Create Swapchains for our platform specific surface
   const auto oldSwapChain = info.swapChain;
-  const auto format = info.gpu.getSurfaceFormatsKHR(info.surface);
+  const auto formats = info.gpu.getSurfaceFormatsKHR(info.surface);
   const auto pSurfCap = info.gpu.getSurfaceCapabilitiesKHR(info.surface);
   auto swapchainCreateInfo = vk::SwapchainCreateInfoKHR()
     .setSurface(info.surface)
-    .setImageFormat(format.at(0).format)
-    .setImageColorSpace(format.at(0).colorSpace)
+    .setImageFormat(formats.at(0).format)
+    .setImageColorSpace(formats.at(0).colorSpace)
     .setMinImageCount(std::max(pSurfCap.maxImageCount, pSurfCap.minImageCount + 1))
     .setImageArrayLayers(1)
     .setImageUsage(vk::ImageUsageFlagBits::eColorAttachment)
@@ -345,6 +354,9 @@ int setupSwapChains()
     .setQueueFamilyIndexCount(0)
     .setPQueueFamilyIndices(nullptr)
     .setOldSwapchain(oldSwapChain);
+
+  // Save surface format for later use
+  info.surfaceFormat = formats.front().format;
 
   // If indices are separate for gfx and present, we need to handle it
   if(info.gfxQueue != info.prsntQueue)
@@ -362,18 +374,18 @@ int setupSwapChains()
     info.device.destroySwapchainKHR(oldSwapChain);
 
   auto swapChainImages = info.device.getSwapchainImagesKHR(info.swapChain);
-  info.buffers.resize(swapChainImages.size());
+  info.swapchainBuffers.resize(swapChainImages.size());
   auto imageViewCreateInfo = vk::ImageViewCreateInfo()
     .setViewType(vk::ImageViewType::e2D)
-    .setFormat(format.at(0).format)
+    .setFormat(formats.at(0).format)
     .setSubresourceRange(vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
 
   // Initialize the images using the same info
   for(uint32_t i = 0u; i < swapChainImages.size(); ++i)
   {
     imageViewCreateInfo.setImage(swapChainImages[i]);
-    info.buffers[i].image = swapChainImages[i];
-    info.buffers[i].view = info.device.createImageView(imageViewCreateInfo);
+    info.swapchainBuffers[i].image = swapChainImages[i];
+    info.swapchainBuffers[i].view = info.device.createImageView(imageViewCreateInfo);
   }
 
   return 0;
@@ -515,6 +527,60 @@ int allocateDescriptorSet()
   return 0;
 }
 
+int initRenderPass()
+{
+  // Set up two attachments
+  const auto attachments = std::vector<vk::AttachmentDescription>
+  {
+    // The framebuffer (color) attachment
+    vk::AttachmentDescription()
+      .setFormat(info.surfaceFormat)
+      .setSamples(vk::SampleCountFlagBits::e1)
+      .setLoadOp(vk::AttachmentLoadOp::eClear)
+      .setStoreOp(vk::AttachmentStoreOp::eStore)
+      .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+      .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
+      .setInitialLayout(vk::ImageLayout::eUndefined)
+      .setFinalLayout(vk::ImageLayout::ePresentSrcKHR)
+    , 
+    // The depth attachment
+    vk::AttachmentDescription()
+    .setFormat(info.depth.format)
+    .setSamples(vk::SampleCountFlagBits::e1)
+    .setLoadOp(vk::AttachmentLoadOp::eClear)
+    .setStoreOp(vk::AttachmentStoreOp::eDontCare)
+    .setStencilLoadOp(vk::AttachmentLoadOp::eDontCare)
+    .setStencilStoreOp(vk::AttachmentStoreOp::eDontCare)
+    .setInitialLayout(vk::ImageLayout::eUndefined)
+    .setFinalLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal)
+  };
+
+  // AttachmentReferences
+  const auto colorReference = vk::AttachmentReference()
+    .setAttachment(0) // Matches the array index above
+    .setLayout(vk::ImageLayout::eColorAttachmentOptimal);
+  const auto depthReference = vk::AttachmentReference()
+    .setAttachment(1)
+    .setLayout(vk::ImageLayout::eDepthStencilAttachmentOptimal);
+
+  // Subpass description
+  const auto subpass = vk::SubpassDescription()
+    .setPipelineBindPoint(vk::PipelineBindPoint::eGraphics) // Graphics or compute
+    .setColorAttachmentCount(1)
+    .setPColorAttachments(&colorReference)
+    .setPDepthStencilAttachment(&depthReference);
+
+  // Define the render pass
+  const auto renderPassCreateInfo = vk::RenderPassCreateInfo()
+    .setAttachmentCount(attachments.size())
+    .setPAttachments(attachments.data())
+    .setSubpassCount(1)
+    .setPSubpasses(&subpass);
+  info.renderPass = info.device.createRenderPass(renderPassCreateInfo);
+
+  return 0;
+}
+
 int main()
 {
 #ifdef WIN32
@@ -543,6 +609,7 @@ int main()
   setupDescriptorSetLayoutAndPipelineLayout();
   setupDescriptorSetPool();
   allocateDescriptorSet();
+  initRenderPass();
 
   // Poll for user input.
   bool stillRunning = true;
