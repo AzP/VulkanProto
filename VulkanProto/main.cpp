@@ -108,7 +108,7 @@ struct vkinfo
   vk::Queue gfxQueue;
   vk::Queue prsntQueue;
 
-  vk::SwapchainKHR swapChain;
+  vk::SwapchainKHR swapchain;
   vk::Format surfaceFormat;
   std::vector<SwapchainBuffers> swapchainBuffers;
 
@@ -126,6 +126,7 @@ struct vkinfo
 
   vk::RenderPass renderPass;
 
+  std::vector<vk::Framebuffer> framebuffers;
 
 } info;
 
@@ -342,7 +343,7 @@ int setupDevicesAndQueues()
 int setupSwapChains()
 {
   // Create Swapchains for our platform specific surface
-  const auto oldSwapChain = info.swapChain;
+  const auto oldSwapChain = info.swapchain;
   const auto formats = info.gpu.getSurfaceFormatsKHR(info.surface);
   const auto pSurfCap = info.gpu.getSurfaceCapabilitiesKHR(info.surface);
   auto swapchainCreateInfo = vk::SwapchainCreateInfoKHR()
@@ -376,11 +377,11 @@ int setupSwapChains()
   info.surfaceCapabilities = pSurfCap;
 
   // Create the swapchain, clear old one, and create images and imageviews
-  info.swapChain = info.device.createSwapchainKHR(swapchainCreateInfo);
+  info.swapchain = info.device.createSwapchainKHR(swapchainCreateInfo);
   if(oldSwapChain)
     info.device.destroySwapchainKHR(oldSwapChain);
 
-  auto swapChainImages = info.device.getSwapchainImagesKHR(info.swapChain);
+  auto swapChainImages = info.device.getSwapchainImagesKHR(info.swapchain);
   info.swapchainBuffers.resize(swapChainImages.size());
   auto imageViewCreateInfo = vk::ImageViewCreateInfo()
     .setViewType(vk::ImageViewType::e2D)
@@ -633,6 +634,30 @@ int setupShaders()
       .setPName("main")
       .setModule(fragmentShaderModule)
   };
+
+  return 0;
+}
+
+int setupFrameBuffers()
+{
+  auto attachments = std::vector<vk::ImageView>(2);
+  attachments[1] = info.depth.view; // Set the second buffer to always be depth buffer
+
+  const auto frameBufferCreateInfo = vk::FramebufferCreateInfo()
+    .setRenderPass(info.renderPass)
+    .setAttachmentCount(2)
+    .setWidth(info.surfaceCapabilities.currentExtent.width)
+    .setHeight(info.surfaceCapabilities.currentExtent.height)
+    .setLayers(1);
+
+  info.framebuffers = std::vector<vk::Framebuffer>(info.swapchainBuffers.size());
+
+  for(unsigned int i = 0; i < info.framebuffers.size(); ++i)
+  {
+    // Set the first (fb) attachment to the buffer and then create the framebuffer (using the attachments)
+    attachments[0] = info.swapchainBuffers[i].view;
+    info.framebuffers[i] = info.device.createFramebuffer(frameBufferCreateInfo);
+  }
 
   return 0;
 }
