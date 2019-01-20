@@ -48,6 +48,7 @@ Create and destroy a Vulkan surface on an SDL window.
 #include <iostream>
 #include <vector>
 #include <sstream>
+#include <fstream>
 
 #undef min
 #undef max
@@ -587,11 +588,25 @@ int initRenderPass()
   return 0;
 }
 
+// Read spv compiled binary shader and return it as a vector<unsigned int>
+std::vector<unsigned int> readShader(std::string filename)
+{
+  std::ifstream shaderfile(filename, std::ifstream::binary);
+  assert(shaderfile);
+  std::vector<unsigned int> contents;
+  shaderfile.seekg(0, std::ios::end);
+  contents.resize(shaderfile.tellg() / sizeof(contents.front()));
+  shaderfile.seekg(0, std::ios::beg);
+  shaderfile.read((char*)contents.data(), contents.size() * sizeof(contents.front()));
+  shaderfile.close();
+
+  return std::move(contents);
+}
+
 int setupShaders()
 {
-  std::vector<unsigned int> vtx_spv;
-
-  std::vector<unsigned int> frag_spv;
+  const auto vtx_spv = readShader("vert.spv");
+  const auto frag_spv = readShader("frag.spv");
 
   // Vertex shader
   const auto vertexShaderModuleCreationInfo = vk::ShaderModuleCreateInfo()
@@ -651,6 +666,7 @@ int main()
   setupDescriptorSetPool();
   allocateDescriptorSet();
   initRenderPass();
+  setupShaders();
 
   // Poll for user input.
   bool stillRunning = true;
