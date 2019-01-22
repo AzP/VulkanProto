@@ -87,9 +87,16 @@ struct SwapchainBuffers
 
 struct UniformData
 {
-  VkBuffer buf;
+  VkBuffer buffer;
   VkDeviceMemory mem;
   VkDescriptorBufferInfo bufferInfo;
+};
+
+struct VertexBufferData
+{
+  VkBuffer buffer;
+  vk::VertexInputBindingDescription vertexInputDesc;
+  std::vector<vk::VertexInputAttributeDescription> vertexInputAttribs;
 };
 
 struct vkinfo
@@ -128,6 +135,7 @@ struct vkinfo
 
   std::vector<vk::Framebuffer> framebuffers;
 
+  VertexBufferData vertexBufferData;
 } info;
 
 struct sdlinfo
@@ -452,6 +460,7 @@ int setupUniformBuffer(void* data, size_t size)
   const auto pass = memory_type_from_properties(memReqs.memoryTypeBits,
                                                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
                                                 memAllocInfo.memoryTypeIndex);
+  assert(pass && "No mappable, coherent memory");
   const auto memory = info.device.allocateMemory(memAllocInfo);
 
   // Write the actual uniform data to the buffer
@@ -461,8 +470,8 @@ int setupUniformBuffer(void* data, size_t size)
   info.device.bindBufferMemory(buffer, memory, 0); // Associate the allocated memory with the buffer object
 
   // Save buffer info for later access
-  info.uniformData.buf = buffer;
-  info.uniformData.bufferInfo.buffer = info.uniformData.buf;
+  info.uniformData.buffer = buffer;
+  info.uniformData.bufferInfo.buffer = info.uniformData.buffer;
   info.uniformData.bufferInfo.offset = 0;
   info.uniformData.bufferInfo.range = size;
 
@@ -520,13 +529,13 @@ int allocateDescriptorSet()
 {
   const auto allocInfo = vk::DescriptorSetAllocateInfo()
     .setDescriptorPool(info.descriptorPool)
-    .setDescriptorSetCount(info.descriptorSetLayouts.size())
+    .setDescriptorSetCount((uint32_t)info.descriptorSetLayouts.size())
     .setPSetLayouts(info.descriptorSetLayouts.data());
   info.descriptorSets = info.device.allocateDescriptorSets(allocInfo);
 
   const auto writes = std::vector<vk::WriteDescriptorSet>{ vk::WriteDescriptorSet()
     .setDstSet(info.descriptorSets.front())
-    .setDescriptorCount(info.descriptorSets.size())
+    .setDescriptorCount((uint32_t)info.descriptorSets.size())
     .setDescriptorType(vk::DescriptorType::eUniformBuffer)
     .setPBufferInfo((const vk::DescriptorBufferInfo*)&info.uniformData.bufferInfo) };
   // Copy the VkDescriptorBufferInfo into the descriptor (the device)
@@ -580,7 +589,7 @@ int initRenderPass()
 
   // Define the render pass
   const auto renderPassCreateInfo = vk::RenderPassCreateInfo()
-    .setAttachmentCount(attachments.size())
+    .setAttachmentCount((uint32_t)attachments.size())
     .setPAttachments(attachments.data())
     .setSubpassCount(1)
     .setPSubpasses(&subpass);
@@ -658,6 +667,102 @@ int setupFrameBuffers()
     attachments[0] = info.swapchainBuffers[i].view;
     info.framebuffers[i] = info.device.createFramebuffer(frameBufferCreateInfo);
   }
+
+  return 0;
+}
+
+int createVertexBuffer()
+{
+  const auto vertexData = std::vector<glm::vec4>{
+    // red face
+    glm::vec4(-1, -1, 1, 1), glm::vec4(1.f, 0.f, 0.f, 1.0f),
+    glm::vec4(-1, 1, 1, 1), glm::vec4(1.f, 0.f, 0.f, 1.0f),
+    glm::vec4(1, -1, 1, 1), glm::vec4(1.f, 0.f, 0.f, 1.0f),
+    glm::vec4(1, -1, 1, 1), glm::vec4(1.f, 0.f, 0.f, 1.0f),
+    glm::vec4(-1, 1, 1, 1), glm::vec4(1.f, 0.f, 0.f, 1.0f),
+    glm::vec4(1, 1, 1, 1), glm::vec4(1.f, 0.f, 0.f, 1.0f),
+    // green face
+    glm::vec4(-1, -1, -1, 1), glm::vec4(0.f, 1.f, 0.f, 1.0f),
+    glm::vec4(1, -1, -1, 1), glm::vec4(0.f, 1.f, 0.f, 1.0f),
+    glm::vec4(-1, 1, -1, 1), glm::vec4(0.f, 1.f, 0.f, 1.0f),
+    glm::vec4(-1, 1, -1, 1), glm::vec4(0.f, 1.f, 0.f, 1.0f),
+    glm::vec4(1, -1, -1, 1), glm::vec4(0.f, 1.f, 0.f, 1.0f),
+    glm::vec4(1, 1, -1, 1), glm::vec4(0.f, 1.f, 0.f, 1.0f),
+    // blue face
+    glm::vec4(-1, 1, 1, 1), glm::vec4(0.f, 0.f, 1.f, 1.0f),
+    glm::vec4(-1, -1, 1, 1), glm::vec4(0.f, 0.f, 1.f, 1.0f),
+    glm::vec4(-1, 1, -1, 1), glm::vec4(0.f, 0.f, 1.f, 1.0f),
+    glm::vec4(-1, 1, -1, 1), glm::vec4(0.f, 0.f, 1.f, 1.0f),
+    glm::vec4(-1, -1, 1, 1), glm::vec4(0.f, 0.f, 1.f, 1.0f),
+    glm::vec4(-1, -1, -1, 1), glm::vec4(0.f, 0.f, 1.f, 1.0f),
+    // yellow face
+    glm::vec4(1, 1, 1, 1), glm::vec4(1.f, 1.f, 0.f, 1.0f),
+    glm::vec4(1, 1, -1, 1), glm::vec4(1.f, 1.f, 0.f, 1.0f),
+    glm::vec4(1, -1, 1, 1), glm::vec4(1.f, 1.f, 0.f, 1.0f),
+    glm::vec4(1, -1, 1, 1), glm::vec4(1.f, 1.f, 0.f, 1.0f),
+    glm::vec4(1, 1, -1, 1), glm::vec4(1.f, 1.f, 0.f, 1.0f),
+    glm::vec4(1, -1, -1, 1), glm::vec4(1.f, 1.f, 0.f, 1.0f),
+    // magenta face
+    glm::vec4(1, 1, 1, 1), glm::vec4(1.f, 0.f, 1.f, 1.0f),
+    glm::vec4(-1, 1, 1, 1), glm::vec4(1.f, 0.f, 1.f, 1.0f),
+    glm::vec4(1, 1, -1, 1), glm::vec4(1.f, 0.f, 1.f, 1.0f),
+    glm::vec4(1, 1, -1, 1), glm::vec4(1.f, 0.f, 1.f, 1.0f),
+    glm::vec4(-1, 1, 1, 1), glm::vec4(1.f, 0.f, 1.f, 1.0f),
+    glm::vec4(-1, 1, -1, 1), glm::vec4(1.f, 0.f, 1.f, 1.0f),
+    // cyan face
+    glm::vec4(1, -1, 1, 1), glm::vec4(0.f, 1.f, 1.f, 1.0f),
+    glm::vec4(1, -1, -1, 1), glm::vec4(0.f, 1.f, 1.f, 1.0f),
+    glm::vec4(-1, -1, 1, 1), glm::vec4(0.f, 1.f, 1.f, 1.0f),
+    glm::vec4(-1, -1, 1, 1), glm::vec4(0.f, 1.f, 1.f, 1.0f),
+    glm::vec4(1, -1, -1, 1), glm::vec4(0.f, 1.f, 1.f, 1.0f),
+    glm::vec4(-1, -1, -1, 1), glm::vec4(0.f, 1.f, 1.f, 1.0f),
+  };
+
+  // Create the buffer create info description, and then create the buffer
+  const auto bufferInfo = vk::BufferCreateInfo()
+    .setUsage(vk::BufferUsageFlagBits::eVertexBuffer)
+    .setSharingMode(vk::SharingMode::eExclusive)
+    .setQueueFamilyIndexCount((uint32_t)vertexData.size());
+  const auto buffer = info.device.createBuffer(bufferInfo);
+
+  // We need memory requirements from the GPU to allocate vertex buffer memory
+  auto memReqs = info.device.getBufferMemoryRequirements(buffer);
+  auto memAllocInfo = vk::MemoryAllocateInfo()
+    .setAllocationSize(memReqs.size)
+    .setMemoryTypeIndex(0);
+  const auto pass = memory_type_from_properties(memReqs.memoryTypeBits,
+                                                vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+                                                memAllocInfo.memoryTypeIndex);
+  assert(pass && "No mappable, coherent memory");
+  const auto memory = info.device.allocateMemory(memAllocInfo);
+
+  // Write the actual vertex data to the buffer
+  const auto bufferData = info.device.mapMemory(memory, 0, memReqs.size);
+  memcpy(bufferData, vertexData.data(), sizeof(vertexData.front()) * vertexData.size());
+
+  info.device.unmapMemory(memory); // Unmap the memory buffer ASAP
+  info.device.bindBufferMemory(buffer, memory, 0); // Associate the allocated memory with the buffer object
+  info.vertexBufferData.buffer = buffer;
+
+  // Save the vertex info for later setup of graphics pipeline
+  info.vertexBufferData.vertexInputDesc = vk::VertexInputBindingDescription()
+    .setBinding(0)
+    .setInputRate(vk::VertexInputRate::eVertex)
+    .setStride((uint32_t)(sizeof(vertexData.front()) * 2.0f));
+
+  info.vertexBufferData.vertexInputAttribs = std::vector<vk::VertexInputAttributeDescription>
+  {
+    vk::VertexInputAttributeDescription()
+      .setBinding(0)
+      .setLocation(0)
+      .setFormat(vk::Format::eR32G32B32A32Sfloat)
+      .setOffset(0),
+    vk::VertexInputAttributeDescription()
+      .setBinding(0)
+      .setLocation(1)
+      .setFormat(vk::Format::eR32G32B32A32Sfloat)
+      .setOffset(sizeof(vertexData.front()))
+  };
 
   return 0;
 }
@@ -794,4 +899,4 @@ std::vector<const char*> getAvailableWSIExtensions()
 #endif
 
   return extensions;
-}
+  }
