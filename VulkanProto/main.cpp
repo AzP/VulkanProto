@@ -133,9 +133,13 @@ struct vkinfo
 
   vk::RenderPass renderPass;
 
+  std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
+
   std::vector<vk::Framebuffer> framebuffers;
 
   VertexBufferData vertexBufferData;
+
+  vk::Pipeline pipeline;
 } info;
 
 struct sdlinfo
@@ -644,6 +648,9 @@ int setupShaders()
       .setModule(fragmentShaderModule)
   };
 
+  // Save them for later when setting up the graphics pipeline
+  info.shaderStages = pipelineStageShaderStageCreateInfo;
+
   return 0;
 }
 
@@ -763,6 +770,84 @@ int createVertexBuffer()
       .setFormat(vk::Format::eR32G32B32A32Sfloat)
       .setOffset(sizeof(vertexData.front()))
   };
+
+  return 0;
+}
+
+int setupPipelineStates()
+{
+  // Dynamic state, changeable by command buffer commands
+  std::vector<vk::DynamicState> dynamicStates;
+  auto dynamicStateCreateInfo = vk::PipelineDynamicStateCreateInfo()
+    .setDynamicStateCount(0)
+    .setPDynamicStates(dynamicStates.data());
+
+  // Pipeline Vertex Input State
+  const auto vertexInputStateCreateInfo = vk::PipelineVertexInputStateCreateInfo()
+    .setVertexBindingDescriptionCount(1)
+    .setPVertexBindingDescriptions(&info.vertexBufferData.vertexInputDesc)
+    .setVertexAttributeDescriptionCount(info.vertexBufferData.vertexInputAttribs.size())
+    .setPVertexAttributeDescriptions(info.vertexBufferData.vertexInputAttribs.data());
+
+  // Pipeline Vertex Input Assembly State (describes the mesh data)
+  const auto vertexInputAssemblyStateCreateInfo = vk::PipelineInputAssemblyStateCreateInfo()
+    .setPrimitiveRestartEnable(VK_FALSE)
+    .setTopology(vk::PrimitiveTopology::eTriangleList);
+
+  // Pipeline rasterization state
+  const auto pipelineRasterStateCreateInfo = vk::PipelineRasterizationStateCreateInfo()
+    .setPolygonMode(vk::PolygonMode::eFill)
+    .setCullMode(vk::CullModeFlagBits::eBack)
+    .setFrontFace(vk::FrontFace::eClockwise)
+    .setDepthClampEnable(VK_TRUE)
+    .setLineWidth(1.0);
+
+  // Pipeline Color Blend State
+  const auto attachState = std::vector<vk::PipelineColorBlendAttachmentState>{
+    vk::PipelineColorBlendAttachmentState()
+      .setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)
+  };
+  const auto pipelineColorBlendStateCreateInfo = vk::PipelineColorBlendStateCreateInfo()
+    .setAttachmentCount(attachState.size())
+    .setPAttachments(attachState.data())
+    .setLogicOp(vk::LogicOp::eNoOp)
+    .setBlendConstants({ 1.0f, 1.0f, 1.0f, 1.0f });
+
+  // Pipeline viewport state
+  const auto vpCreateStateInfo = vk::PipelineViewportStateCreateInfo()
+    .setViewportCount(1)
+    .setScissorCount(1);
+
+  dynamicStates.push_back(vk::DynamicState::eViewport);
+  dynamicStates.push_back(vk::DynamicState::eScissor);
+  dynamicStateCreateInfo.setDynamicStateCount(dynamicStates.size());
+
+  // Pipeline Depth Stencil State
+  const auto depthStencilState = vk::PipelineDepthStencilStateCreateInfo()
+    .setDepthTestEnable(VK_TRUE)
+    .setDepthWriteEnable(VK_TRUE)
+    .setDepthCompareOp(vk::CompareOp::eLessOrEqual)
+    .setBack(vk::StencilOpState(vk::StencilOp::eKeep, vk::StencilOp::eKeep, vk::StencilOp::eKeep, vk::CompareOp::eAlways))
+    .setFront(vk::StencilOpState(vk::StencilOp::eKeep, vk::StencilOp::eKeep, vk::StencilOp::eKeep, vk::CompareOp::eAlways));
+
+  // No multisample for now
+  const auto pipelineMultisampleStateCreateInfo = vk::PipelineMultisampleStateCreateInfo();
+
+  // Create the pipeline from all the pipeline states
+  const auto graphicsPipelineCreateInfo = vk::GraphicsPipelineCreateInfo()
+    .setLayout(info.pipelineLayout)
+    .setPVertexInputState(&vertexInputStateCreateInfo)
+    .setPInputAssemblyState(&vertexInputAssemblyStateCreateInfo)
+    .setPRasterizationState(&pipelineRasterStateCreateInfo)
+    .setPColorBlendState(&pipelineColorBlendStateCreateInfo)
+    .setPMultisampleState(&pipelineMultisampleStateCreateInfo)
+    .setPDynamicState(&dynamicStateCreateInfo)
+    .setPViewportState(&vpCreateStateInfo)
+    .setPDepthStencilState(&depthStencilState)
+    .setPStages(info.shaderStages.data())
+    .setStageCount(info.shaderStages.size())
+    .setRenderPass(info.renderPass);
+  info.pipeline = info.device.createGraphicsPipeline(nullptr, graphicsPipelineCreateInfo);
 
   return 0;
 }
@@ -901,4 +986,4 @@ std::vector<const char*> getAvailableWSIExtensions()
 #endif
 
   return extensions;
-  }
+}
