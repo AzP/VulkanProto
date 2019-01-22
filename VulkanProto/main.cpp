@@ -797,6 +797,8 @@ int main()
   allocateDescriptorSet();
   initRenderPass();
   setupShaders();
+  setupFrameBuffers();
+  createVertexBuffer();
 
   // Poll for user input.
   bool stillRunning = true;
