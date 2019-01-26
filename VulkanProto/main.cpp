@@ -87,14 +87,15 @@ struct SwapchainBuffers
 
 struct UniformData
 {
-  VkBuffer buffer;
-  VkDeviceMemory mem;
-  VkDescriptorBufferInfo bufferInfo;
+  vk::Buffer buffer;
+  vk::DeviceMemory mem;
+  vk::DescriptorBufferInfo bufferInfo;
 };
 
 struct VertexBufferData
 {
-  VkBuffer buffer;
+  vk::Buffer buffer;
+  vk::DeviceMemory mem;
   vk::VertexInputBindingDescription vertexInputDesc;
   std::vector<vk::VertexInputAttributeDescription> vertexInputAttribs;
 };
@@ -139,7 +140,9 @@ struct vkinfo
 
   VertexBufferData vertexBufferData;
 
+  vk::PipelineCache pipelineCache;
   vk::Pipeline pipeline;
+  uint32_t currentBuffer;
 } info;
 
 struct sdlinfo
@@ -227,7 +230,7 @@ int setupApplicationAndInstance()
     return 1;
   }
   SDL_Window* window = SDL_CreateWindow("Vulkan Window", SDL_WINDOWPOS_CENTERED,
-                                        SDL_WINDOWPOS_CENTERED, 1280, 720, SDL_WINDOW_OPENGL);
+                                        SDL_WINDOWPOS_CENTERED, 720, 720, SDL_WINDOW_OPENGL);
   if(window == NULL) {
     std::cout << "Could not create SDL window." << std::endl;
     return 1;
@@ -340,8 +343,13 @@ int setupDevicesAndQueues()
   info.gfxQueue = info.device.getQueue(graphicsQueueFamilyIndex, 0);
   info.prsntQueue = info.device.getQueue(presentQueueFamilyIndex, 0);
 
+  return 0;
+}
+
+int setupCommandBuffers()
+{
   // Setup and create a command queue pool
-  const auto cmdPoolInfo = vk::CommandPoolCreateInfo().setQueueFamilyIndex(graphicsQueueFamilyIndex);
+  const auto cmdPoolInfo = vk::CommandPoolCreateInfo().setQueueFamilyIndex(info.gfxQueueFamilyIdx);
   info.cmdPool = info.device.createCommandPool(cmdPoolInfo);
   // Allocate the command buffers for that pool
   const auto cmdBufAllocInfo = vk::CommandBufferAllocateInfo()
@@ -350,6 +358,17 @@ int setupDevicesAndQueues()
   info.cmdBuffers = info.device.allocateCommandBuffers(cmdBufAllocInfo);
 
   return 0;
+}
+
+void beginCommandBuffer()
+{
+  const auto cmdBufferInfo = vk::CommandBufferBeginInfo();
+  info.cmdBuffers.front().begin(cmdBufferInfo);
+}
+
+void endCommandBuffer()
+{
+  info.cmdBuffers.front().end();
 }
 
 int setupSwapChains()
@@ -662,6 +681,7 @@ int setupFrameBuffers()
   const auto frameBufferCreateInfo = vk::FramebufferCreateInfo()
     .setRenderPass(info.renderPass)
     .setAttachmentCount(2)
+    .setPAttachments(attachments.data())
     .setWidth(info.surfaceCapabilities.currentExtent.width)
     .setHeight(info.surfaceCapabilities.currentExtent.height)
     .setLayers(1);
@@ -729,7 +749,7 @@ int createVertexBuffer()
   const auto bufferInfo = vk::BufferCreateInfo()
     .setUsage(vk::BufferUsageFlagBits::eVertexBuffer)
     .setSharingMode(vk::SharingMode::eExclusive)
-    .setQueueFamilyIndexCount((uint32_t)vertexData.size());
+    .setSize(vertexData.size() * sizeof(vertexData.front()));
   const auto buffer = info.device.createBuffer(bufferInfo);
 
   // We need memory requirements from the GPU to allocate vertex buffer memory
@@ -750,6 +770,7 @@ int createVertexBuffer()
   info.device.unmapMemory(memory); // Unmap the memory buffer ASAP
   info.device.bindBufferMemory(buffer, memory, 0); // Associate the allocated memory with the buffer object
   info.vertexBufferData.buffer = buffer;
+  info.vertexBufferData.mem = memory;
 
   // Save the vertex info for later setup of graphics pipeline
   info.vertexBufferData.vertexInputDesc = vk::VertexInputBindingDescription()
@@ -776,12 +797,6 @@ int createVertexBuffer()
 
 int setupPipelineStates()
 {
-  // Dynamic state, changeable by command buffer commands
-  std::vector<vk::DynamicState> dynamicStates;
-  auto dynamicStateCreateInfo = vk::PipelineDynamicStateCreateInfo()
-    .setDynamicStateCount(0)
-    .setPDynamicStates(dynamicStates.data());
-
   // Pipeline Vertex Input State
   const auto vertexInputStateCreateInfo = vk::PipelineVertexInputStateCreateInfo()
     .setVertexBindingDescriptionCount(1)
@@ -799,7 +814,7 @@ int setupPipelineStates()
     .setPolygonMode(vk::PolygonMode::eFill)
     .setCullMode(vk::CullModeFlagBits::eBack)
     .setFrontFace(vk::FrontFace::eClockwise)
-    .setDepthClampEnable(VK_TRUE)
+    .setDepthClampEnable(VK_FALSE)
     .setLineWidth(1.0);
 
   // Pipeline Color Blend State
@@ -818,9 +833,15 @@ int setupPipelineStates()
     .setViewportCount(1)
     .setScissorCount(1);
 
+  // Add viewport and scissor to dynamic states (to be able to resize window without
+  // re-creating pipeline
+  std::vector<vk::DynamicState> dynamicStates;
   dynamicStates.push_back(vk::DynamicState::eViewport);
   dynamicStates.push_back(vk::DynamicState::eScissor);
-  dynamicStateCreateInfo.setDynamicStateCount(dynamicStates.size());
+  // Dynamic state, changeable by command buffer commands
+  auto dynamicStateCreateInfo = vk::PipelineDynamicStateCreateInfo()
+    .setDynamicStateCount(dynamicStates.size())
+    .setPDynamicStates(dynamicStates.data());
 
   // Pipeline Depth Stencil State
   const auto depthStencilState = vk::PipelineDepthStencilStateCreateInfo()
@@ -832,6 +853,9 @@ int setupPipelineStates()
 
   // No multisample for now
   const auto pipelineMultisampleStateCreateInfo = vk::PipelineMultisampleStateCreateInfo();
+
+  vk::PipelineCacheCreateInfo pipelineCache;
+  info.pipelineCache = info.device.createPipelineCache(pipelineCache);
 
   // Create the pipeline from all the pipeline states
   const auto graphicsPipelineCreateInfo = vk::GraphicsPipelineCreateInfo()
@@ -847,10 +871,199 @@ int setupPipelineStates()
     .setPStages(info.shaderStages.data())
     .setStageCount(info.shaderStages.size())
     .setRenderPass(info.renderPass);
-  info.pipeline = info.device.createGraphicsPipeline(nullptr, graphicsPipelineCreateInfo);
+  info.pipeline = info.device.createGraphicsPipeline(info.pipelineCache, graphicsPipelineCreateInfo);
 
   return 0;
 }
+
+std::pair<vk::Semaphore, vk::Fence> recordCommandBuffer()
+{
+  // Create semaphore for waiting for the previous frame
+  const auto imageAquiredSemaphoreCreateInfo = vk::SemaphoreCreateInfo();
+  const auto imageAquiredSemaphore = info.device.createSemaphore(imageAquiredSemaphoreCreateInfo);
+
+  // Get the index of the next available swapchain image
+  info.currentBuffer = info.device.acquireNextImageKHR(info.swapchain, UINT64_MAX, imageAquiredSemaphore, nullptr).value;
+
+  // Use the current CommandBuffer
+  auto& cmd = info.cmdBuffers.front();
+
+  // Begin the render pass
+  const auto clearValues = std::vector<vk::ClearValue>{
+    vk::ClearValue().setColor(std::array<float,4>{ 0.2f,  0.2f,  0.2f,  0.2f }),
+    vk::ClearValue().setDepthStencil({ 1.0f, 0})
+  };
+  const auto renderPassBegin = vk::RenderPassBeginInfo()
+    .setRenderPass(info.renderPass)
+    .setFramebuffer(info.framebuffers[info.currentBuffer])
+    .setRenderArea({ { 0, 0 }, info.surfaceCapabilities.currentExtent })
+    .setClearValueCount(2)
+    .setPClearValues(clearValues.data());
+  cmd.beginRenderPass(renderPassBegin, vk::SubpassContents::eInline);
+
+  // Bind the pipeline to the command buffer
+  cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, info.pipeline);
+
+  // Bind the descriptor sets
+  cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipelineLayout, 0, info.descriptorSets.size(), info.descriptorSets.data(), 0, nullptr);
+  //cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipelineLayout, 0, info.descriptorSets);
+
+  // Bind the vertex buffer
+  cmd.bindVertexBuffers(0, info.vertexBufferData.buffer, { 0 });
+
+  // Set viewport and scissor
+  const auto viewport = vk::Viewport()
+    .setHeight(info.surfaceCapabilities.currentExtent.height)
+    .setWidth(info.surfaceCapabilities.currentExtent.width)
+    .setMinDepth(0.0f)
+    .setMaxDepth(1.0f)
+    .setX(0)
+    .setY(0);
+  cmd.setViewport(0, 1, &viewport);
+  const auto scissor = vk::Rect2D()
+    .setExtent(info.surfaceCapabilities.currentExtent)
+    .setOffset({ 0, 0 });
+  cmd.setScissor(0, 1, &scissor);
+
+  // The actual draw command
+  cmd.draw(12 * 3, 1, 0, 0);
+
+  // End the render pass
+  cmd.endRenderPass();
+
+  endCommandBuffer();
+
+  // First create a fence to know when the GPU is done
+  const auto fenceCreateInfo = vk::FenceCreateInfo();
+  const auto drawFence = info.device.createFence(fenceCreateInfo);
+
+  // Then submit command buffer
+  vk::PipelineStageFlags pipelineStageFlags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+  const auto submitInfo = vk::SubmitInfo()
+    .setWaitSemaphoreCount(1)
+    .setPWaitSemaphores(&imageAquiredSemaphore)
+    .setCommandBufferCount(1)
+    .setPCommandBuffers(info.cmdBuffers.data())
+    .setPWaitDstStageMask(&pipelineStageFlags);
+  info.gfxQueue.submit(submitInfo, drawFence);
+
+  vk::Result res;
+  do {
+    res = info.device.waitForFences(drawFence, VK_TRUE, 1000000);
+  } while(res == vk::Result::eTimeout);
+
+  return { imageAquiredSemaphore, drawFence };
+}
+
+void presentSwapChainImage()
+{
+  const auto presentInfo = vk::PresentInfoKHR()
+    .setSwapchainCount(1)
+    .setPSwapchains(&info.swapchain)
+    .setPImageIndices(&info.currentBuffer);
+  info.prsntQueue.presentKHR(presentInfo);
+}
+
+void destroy_pipeline(vkinfo &info)
+{
+  info.device.destroyPipeline(info.pipeline);
+}
+
+void destroy_pipeline_cache(vkinfo &info)
+{
+  info.device.destroyPipelineCache(info.pipelineCache);
+}
+
+void destroy_uniform_buffer(vkinfo &info)
+{
+  info.device.destroyBuffer(info.uniformData.buffer);
+  info.device.freeMemory(info.uniformData.mem);
+}
+
+void destroy_descriptor_and_pipeline_layouts(vkinfo &info)
+{
+  for(int i = 0; i < info.descriptorSets.size(); i++)
+    info.device.destroyDescriptorSetLayout(info.descriptorSetLayouts[i]);
+  info.device.destroyPipelineLayout(info.pipelineLayout);
+}
+
+void destroy_descriptor_pool(vkinfo &info)
+{
+  info.device.destroyDescriptorPool(info.descriptorPool);
+}
+
+void destroy_shaders(vkinfo &info)
+{
+  info.device.destroyShaderModule(info.shaderStages[0].module);
+  info.device.destroyShaderModule(info.shaderStages[1].module);
+}
+
+void destroy_command_buffer(vkinfo &info)
+{
+  info.device.freeCommandBuffers(info.cmdPool, info.cmdBuffers);
+}
+
+void destroy_command_pool(vkinfo &info)
+{
+  info.device.destroyCommandPool(info.cmdPool);
+}
+
+void destroy_depth_buffer(vkinfo &info)
+{
+  info.device.destroyImageView(info.depth.view);
+  info.device.destroyImage(info.depth.image);
+  info.device.freeMemory(info.depth.mem);
+}
+
+void destroy_vertex_buffer(vkinfo &info)
+{
+  info.device.destroyBuffer(info.vertexBufferData.buffer);
+  info.device.freeMemory(info.vertexBufferData.mem);
+}
+
+void destroy_swap_chain(vkinfo &info)
+{
+  for(uint32_t i = 0; i < info.swapchainBuffers.size(); i++) {
+    info.device.destroyImageView(info.swapchainBuffers[i].view);
+  }
+  info.device.destroySwapchainKHR(info.swapchain);
+}
+
+void destroy_framebuffers(vkinfo &info)
+{
+  for(uint32_t i = 0; i < info.framebuffers.size(); i++) {
+    info.device.destroyFramebuffer(info.framebuffers[i]);
+  }
+  info.framebuffers.clear();
+}
+
+void destroy_renderpass(vkinfo &info)
+{
+  info.device.destroyRenderPass(info.renderPass);
+}
+
+void destroy_device(vkinfo &info)
+{
+  info.device.waitIdle();
+  info.device.destroy();
+}
+
+void destroy_instance(vkinfo &info)
+{
+  info.inst.destroy();
+}
+
+//void destroy_textures(vkinfo &info)
+//{
+//  for(size_t i = 0; i < info.textures.size(); i++) {
+//    vkDestroySampler(info.device, info.textures[i].sampler, NULL);
+//    vkDestroyImageView(info.device, info.textures[i].view, NULL);
+//    vkDestroyImage(info.device, info.textures[i].image, NULL);
+//    vkFreeMemory(info.device, info.textures[i].image_memory, NULL);
+//    vkDestroyBuffer(info.device, info.textures[i].buffer, NULL);
+//    vkFreeMemory(info.device, info.textures[i].buffer_memory, NULL);
+//  }
+//}
 
 int main()
 {
@@ -860,6 +1073,7 @@ int main()
 
   setupApplicationAndInstance();
   setupDevicesAndQueues();
+  setupCommandBuffers();
   setupSwapChains();
   setupDepth();
 
@@ -884,6 +1098,18 @@ int main()
   setupShaders();
   setupFrameBuffers();
   createVertexBuffer();
+  setupPipelineStates();
+
+
+  vk::Semaphore imageAcquiredSemaphore;
+  vk::Fence drawFence;
+
+  beginCommandBuffer();
+  auto res = recordCommandBuffer();
+  imageAcquiredSemaphore = res.first;
+  drawFence = res.second;
+  //endCommandBuffer();
+  //submitCommandBuffer();
 
   // Poll for user input.
   bool stillRunning = true;
@@ -899,7 +1125,8 @@ int main()
         break;
 
       default:
-        // Do nothing.
+        presentSwapChainImage();
+
         break;
       }
     }
@@ -908,8 +1135,27 @@ int main()
   }
 
   // Clean up.
-  info.inst.destroySurfaceKHR(info.surface);
-  info.inst.destroy();
+  info.device.destroySemaphore(imageAcquiredSemaphore);
+  info.device.destroyFence(drawFence);
+  destroy_pipeline(info);
+  destroy_pipeline_cache(info);
+  destroy_descriptor_pool(info);
+  destroy_vertex_buffer(info);
+  destroy_framebuffers(info);
+  destroy_shaders(info);
+  destroy_renderpass(info);
+  destroy_descriptor_and_pipeline_layouts(info);
+  destroy_uniform_buffer(info);
+  destroy_depth_buffer(info);
+  destroy_swap_chain(info);
+  destroy_command_buffer(info);
+  destroy_command_pool(info);
+  destroy_device(info);
+  //destroy_window(info);
+  destroy_instance(info);
+
+  //info.inst.destroySurfaceKHR(info.surface);
+  //info.inst.destroy();
   SDL_DestroyWindow(sdlinfo.window);
   SDL_Quit();
 
@@ -932,7 +1178,7 @@ vk::SurfaceKHR createVulkanSurface(const vk::Instance& instance, SDL_Window* win
     vk::AndroidSurfaceCreateInfoKHR surfaceInfo = vk::AndroidSurfaceCreateInfoKHR()
       .setWindow(windowInfo.info.android.window);
     return instance.createAndroidSurfaceKHR(surfaceInfo);
-  }
+}
 #endif
 
 #if defined(SDL_VIDEO_DRIVER_WAYLAND) && defined(VK_USE_PLATFORM_WAYLAND_KHR)
