@@ -5,9 +5,9 @@
 
 __author__ = "Peter Asplund"
 __credits__ = ["Khronos"]
-__version__ = "0.3"
+__version__ = "0.4"
 __maintainer__ = "Peter Asplund"
-__email__ = "peter.asplund@raysearchlabs.com"
+__email__ = "peter.azp@gmail.com"
 __status__ = "Production"
 
 import os
@@ -167,7 +167,7 @@ def validate_shaders(options, shader, failed_validation):
     break_validation = False
 
     # Command to call later
-    validation_command = ['glslangValidator.exe']
+    validation_command = ['glslangValidator']
     arguments = []
     # Check which shaders exist
     if shader.vert_shader.find('void main') != -1:
