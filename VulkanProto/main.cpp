@@ -982,7 +982,7 @@ void destroy_uniform_buffer(vkinfo &info)
 
 void destroy_descriptor_and_pipeline_layouts(vkinfo &info)
 {
-  for(int i = 0; i < info.descriptorSets.size(); i++)
+  for(unsigned int i = 0; i < info.descriptorSets.size(); i++)
     info.device.destroyDescriptorSetLayout(info.descriptorSetLayouts[i]);
   info.device.destroyPipelineLayout(info.pipelineLayout);
 }
