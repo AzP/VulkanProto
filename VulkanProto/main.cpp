@@ -554,7 +554,7 @@ std::vector<unsigned int> readShader(std::string filename) {
 	shaderfile.read((char *)contents.data(), contents.size() * sizeof(contents.front()));
 	shaderfile.close();
 
-	return std::move(contents);
+	return contents;
 }
 
 int setupShaders() {
@@ -790,7 +790,19 @@ int setupPipelineStates() {
 		.setPStages(info.shaderStages.data())
 		.setStageCount(info.shaderStages.size())
 		.setRenderPass(info.renderPass);
-	info.pipeline = info.device.createGraphicsPipeline(info.pipelineCache, graphicsPipelineCreateInfo);
+
+	auto pipeline = info.device.createGraphicsPipeline(info.pipelineCache, graphicsPipelineCreateInfo);
+
+    switch ( pipeline.result )
+    {
+      case vk::Result::eSuccess: break;
+      case vk::Result::ePipelineCompileRequiredEXT:
+		std::cout << "Pipeline requires extension" << std::endl;
+        break;
+      default: assert( false );  // should never happen
+    }
+
+	info.pipeline = pipeline.value;
 
 	return 0;
 }
