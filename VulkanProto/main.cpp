@@ -157,7 +157,7 @@ int setupApplicationAndInstance() {
 	std::vector<const char *> extensions = getAvailableWSIExtensions();
 	std::vector<const char *> layers;
 	//#if defined(_DEBUG)
-	layers.push_back("VK_LAYER_LUNARG_standard_validation");
+	layers.push_back("VK_LAYER_KHRONOS_validation");
 	//#endif
 
 	// vk::ApplicationInfo allows the programmer to specifiy some basic
