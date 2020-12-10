@@ -13,11 +13,9 @@ solution "VulkanProto"
 		files { sourcedir .. "*.cpp", sourcedir .. "*.h" }
 
 		configuration "windows"
-			includedirs {"./include", "./include/freetype2"}
+			includedirs {"./include", "./include/freetype2","$(VULKAN_SDK)/include" }
 			configuration "x64"
 				libdirs {"./lib/x64"}
-			configuration "x86"
-				libdirs {"./lib/x86"}
 
 		configuration "linux"
 			libdirs {"/usr/lib", "/usr/local/lib"}
@@ -29,7 +27,7 @@ solution "VulkanProto"
 			symbols "On"
 			warnings "Extra"
 			configuration "windows"
-				links {"vulkan","SDL2"}
+				links { "$(VULKAN_SDK)/lib/vulkan-1.lib","SDL2"}
 				-- disablewarnings { "4668;4201;4290;4522" } -- Not yet supported in premake4
 			configuration "linux"
 				links {"vulkan","SDL2","ubsan"}
@@ -41,7 +39,7 @@ solution "VulkanProto"
 			warnings "Extra"
 			optimize "On"
 			configuration "windows"
-				links {"vulkan","SDL2"}
+				links {"$(VULKAN_SDK)/lib/vulkan-1.lib","SDL2"}
 				-- undefines{ "_UNICODE" }
 				-- disablewarnings { "4668;4201;4290;4522" }
 			configuration "linux"
