@@ -257,3 +257,4 @@ paket-files/
 # Makefiles
 Makefile
 VulkanProto.make
+VulkanProto/include/
