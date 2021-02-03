@@ -73,52 +73,53 @@ struct VertexBufferData {
 };
 
 struct vkinfo {
-	std::vector<vk::PhysicalDevice> gpus;
-	vk::PhysicalDevice gpu;
-	vk::Device device;
-	vk::SurfaceKHR surface;
-	vk::SurfaceCapabilitiesKHR surfaceCapabilities;
-	vk::Instance inst;
+  vkinfo(){}; // Compiler bug work-around for VS2019
+  std::vector<vk::PhysicalDevice> gpus;
+  vk::PhysicalDevice gpu;
+  vk::Device device;
+  vk::SurfaceKHR surface;
+  vk::SurfaceCapabilitiesKHR surfaceCapabilities;
+  vk::Instance inst;
 
-	vk::CommandPool cmdPool;
-	std::vector<vk::CommandBuffer> cmdBuffers;
+  vk::CommandPool cmdPool;
+  std::vector<vk::CommandBuffer> cmdBuffers;
 
-	uint32_t gfxQueueFamilyIdx{0}, prsntQueueFamilyIdx{0};
-	vk::Queue gfxQueue;
-	vk::Queue prsntQueue;
+  uint32_t gfxQueueFamilyIdx{0}, prsntQueueFamilyIdx{0};
+  vk::Queue gfxQueue;
+  vk::Queue prsntQueue;
 
-	vk::SwapchainKHR swapchain;
-	vk::Format surfaceFormat;
-	std::vector<SwapchainBuffers> swapchainBuffers;
+  vk::SwapchainKHR swapchain;
+  vk::Format surfaceFormat;
+  std::vector<SwapchainBuffers> swapchainBuffers;
 
-	vk::PhysicalDeviceMemoryProperties memoryProperties;
-	vk::PhysicalDeviceProperties deviceProperties;
+  vk::PhysicalDeviceMemoryProperties memoryProperties;
+  vk::PhysicalDeviceProperties deviceProperties;
 
-	DepthData depth;
+  DepthData depth;
 
-	std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
-	vk::PipelineLayout pipelineLayout;
+  std::vector<vk::DescriptorSetLayout> descriptorSetLayouts;
+  vk::PipelineLayout pipelineLayout;
 
-	UniformData uniformData;
-	vk::DescriptorPool descriptorPool;
-	std::vector<vk::DescriptorSet> descriptorSets;
+  UniformData uniformData;
+  vk::DescriptorPool descriptorPool;
+  std::vector<vk::DescriptorSet> descriptorSets;
 
-	vk::RenderPass renderPass;
+  vk::RenderPass renderPass;
 
-	std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
+  std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
 
-	std::vector<vk::Framebuffer> framebuffers;
+  std::vector<vk::Framebuffer> framebuffers;
 
-	VertexBufferData vertexBufferData;
+  VertexBufferData vertexBufferData;
 
-	vk::PipelineCache pipelineCache;
-	vk::Pipeline pipeline;
-	uint32_t currentBuffer;
-} info;
+  vk::PipelineCache pipelineCache;
+  vk::Pipeline pipeline;
+  uint32_t currentBuffer;
+} g_info;
 
 struct sdlinfo {
 	SDL_Window *window;
-} sdlinfo;
+} g_sdlinfo;
 
 vk::PresentModeKHR getPresentMode(const vk::SurfaceKHR &surface, const vk::PhysicalDevice &gpu) {
 	auto modes = gpu.getSurfacePresentModesKHR(surface);
@@ -137,10 +138,10 @@ std::vector<const char *> getAvailableWSIExtensions();
 
 bool memory_type_from_properties(uint32_t typeBits, vk::MemoryPropertyFlags requirements_mask, uint32_t &typeIndex) {
 	// Search memtypes to find first index with those properties
-	for (uint32_t i = 0; i < info.memoryProperties.memoryTypeCount; ++i) {
+	for (uint32_t i = 0; i < g_info.memoryProperties.memoryTypeCount; ++i) {
 		if ((typeBits & 1) == 1) {
 			// Type is available, does it match user properties?
-			if ((info.memoryProperties.memoryTypes[i].propertyFlags & requirements_mask) == requirements_mask) {
+			if ((g_info.memoryProperties.memoryTypes[i].propertyFlags & requirements_mask) == requirements_mask) {
 				typeIndex = i;
 				return true;
 			}
@@ -188,7 +189,7 @@ int setupApplicationAndInstance() {
 		std::cout << "Could not create a Vulkan instance: " << e.what() << std::endl;
 		return 1;
 	}
-	info.inst = instance;
+	g_info.inst = instance;
 
 	// Create an SDL window that supports Vulkan and OpenGL rendering.
 	if (SDL_Init(SDL_INIT_VIDEO) != 0) {
@@ -200,7 +201,7 @@ int setupApplicationAndInstance() {
 		std::cout << "Could not create SDL window." << std::endl;
 		return 1;
 	}
-	sdlinfo.window = window;
+	g_sdlinfo.window = window;
 
 	// Create a platform specific Vulkan surface for rendering
 	vk::SurfaceKHR surface;
@@ -211,7 +212,7 @@ int setupApplicationAndInstance() {
 		instance.destroy();
 		return 1;
 	}
-	info.surface = surface;
+	g_info.surface = surface;
 
 	return 0;
 }
@@ -219,26 +220,26 @@ int setupApplicationAndInstance() {
 int setupDevicesAndQueues() {
 	// Enumerate devices
 	try {
-		info.gpus = info.inst.enumeratePhysicalDevices();
-		info.gpu = info.gpus[0];
+		g_info.gpus = g_info.inst.enumeratePhysicalDevices();
+		g_info.gpu = g_info.gpus[0];
 	} catch (const std::exception &e) {
 		std::cout << "No physical devices found: " << e.what() << std::endl;
-		info.inst.destroy();
+		g_info.inst.destroy();
 		return 1;
 	}
 
 	// Setup the gpu memory properties
-	info.memoryProperties = info.gpu.getMemoryProperties();
-	info.deviceProperties = info.gpu.getProperties();
+	g_info.memoryProperties = g_info.gpu.getMemoryProperties();
+	g_info.deviceProperties = g_info.gpu.getProperties();
 
 	/* Call with nullptr data to get count */
-	auto queueFamilyProps = info.gpu.getQueueFamilyProperties();
+	auto queueFamilyProps = g_info.gpu.getQueueFamilyProperties();
 
 	// Create the device and queues
 	// Iterate over each queue to learn whether it supports presenting:
 	std::vector<vk::Bool32> supportsPresent(queueFamilyProps.size());
 	for (uint32_t i = 0; i < queueFamilyProps.size(); ++i) {
-		info.gpu.getSurfaceSupportKHR(i, info.surface, &supportsPresent[i]);
+		g_info.gpu.getSurfaceSupportKHR(i, g_info.surface, &supportsPresent[i]);
 	}
 
 	uint32_t graphicsQueueFamilyIndex = UINT32_MAX;
@@ -271,12 +272,12 @@ int setupDevicesAndQueues() {
 	// Generate error if could not find both a graphics and a present queue
 	if (graphicsQueueFamilyIndex == UINT32_MAX || presentQueueFamilyIndex == UINT32_MAX) {
 		std::cout << "Could not find both graphics and present queues" << std::endl;
-		info.inst.destroy();
+		g_info.inst.destroy();
 		return 1;
 	}
 
-	info.gfxQueueFamilyIdx = graphicsQueueFamilyIndex;
-	info.prsntQueueFamilyIdx = presentQueueFamilyIndex;
+	g_info.gfxQueueFamilyIdx = graphicsQueueFamilyIndex;
+	g_info.prsntQueueFamilyIdx = presentQueueFamilyIndex;
 
 	// Setup queue creation info
 	float queuePriorities[1] = {0.0f};
@@ -290,45 +291,45 @@ int setupDevicesAndQueues() {
 		.setPpEnabledExtensionNames(extensionNames.data());
 
 	try {
-		info.device = info.gpus[0].createDevice(createInfo);
+		g_info.device = g_info.gpus[0].createDevice(createInfo);
 	} catch (const std::exception &e) {
 		std::cout << "Unable to create vkDevice: " << e.what() << std::endl;
-		info.inst.destroy();
+		g_info.inst.destroy();
 		return 1;
 	}
 
 	// Save handles to the Queues
-	info.gfxQueue = info.device.getQueue(graphicsQueueFamilyIndex, 0);
-	info.prsntQueue = info.device.getQueue(presentQueueFamilyIndex, 0);
+	g_info.gfxQueue = g_info.device.getQueue(graphicsQueueFamilyIndex, 0);
+	g_info.prsntQueue = g_info.device.getQueue(presentQueueFamilyIndex, 0);
 
 	return 0;
 }
 
 int setupCommandBuffers() {
 	// Setup and create a command queue pool
-	const auto cmdPoolInfo = vk::CommandPoolCreateInfo().setQueueFamilyIndex(info.gfxQueueFamilyIdx);
-	info.cmdPool = info.device.createCommandPool(cmdPoolInfo);
+	const auto cmdPoolInfo = vk::CommandPoolCreateInfo().setQueueFamilyIndex(g_info.gfxQueueFamilyIdx);
+	g_info.cmdPool = g_info.device.createCommandPool(cmdPoolInfo);
 	// Allocate the command buffers for that pool
-	const auto cmdBufAllocInfo = vk::CommandBufferAllocateInfo().setCommandBufferCount(1).setCommandPool(info.cmdPool);
-	info.cmdBuffers = info.device.allocateCommandBuffers(cmdBufAllocInfo);
+	const auto cmdBufAllocInfo = vk::CommandBufferAllocateInfo().setCommandBufferCount(1).setCommandPool(g_info.cmdPool);
+	g_info.cmdBuffers = g_info.device.allocateCommandBuffers(cmdBufAllocInfo);
 
 	return 0;
 }
 
 void beginCommandBuffer() {
 	const auto cmdBufferInfo = vk::CommandBufferBeginInfo();
-	info.cmdBuffers.front().begin(cmdBufferInfo);
+	g_info.cmdBuffers.front().begin(cmdBufferInfo);
 }
 
-void endCommandBuffer() { info.cmdBuffers.front().end(); }
+void endCommandBuffer() { g_info.cmdBuffers.front().end(); }
 
 int setupSwapChains() {
 	// Create Swapchains for our platform specific surface
-	const auto oldSwapChain = info.swapchain;
-	const auto formats = info.gpu.getSurfaceFormatsKHR(info.surface);
-	const auto pSurfCap = info.gpu.getSurfaceCapabilitiesKHR(info.surface);
+	const auto oldSwapChain = g_info.swapchain;
+	const auto formats = g_info.gpu.getSurfaceFormatsKHR(g_info.surface);
+	const auto pSurfCap = g_info.gpu.getSurfaceCapabilitiesKHR(g_info.surface);
 	auto swapchainCreateInfo = vk::SwapchainCreateInfoKHR()
-		.setSurface(info.surface)
+		.setSurface(g_info.surface)
 		.setImageFormat(formats.at(0).format)
 		.setImageColorSpace(formats.at(0).colorSpace)
 		.setMinImageCount(std::max(pSurfCap.maxImageCount, pSurfCap.minImageCount + 1))
@@ -338,31 +339,31 @@ int setupSwapChains() {
 		.setClipped(true)
 		.setImageExtent(pSurfCap.currentExtent)
 		.setPreTransform(pSurfCap.currentTransform)
-		.setPresentMode(getPresentMode(info.surface, info.gpu))
+		.setPresentMode(getPresentMode(g_info.surface, g_info.gpu))
 		.setImageSharingMode(vk::SharingMode::eExclusive)
 		.setQueueFamilyIndexCount(0)
 		.setPQueueFamilyIndices(nullptr)
 		.setOldSwapchain(oldSwapChain);
 
 	// Save surface format for later use
-	info.surfaceFormat = formats.front().format;
+	g_info.surfaceFormat = formats.front().format;
 
 	// If indices are separate for gfx and present, we need to handle it
-	if (info.gfxQueue != info.prsntQueue) {
-		std::vector<uint32_t> indices = {info.gfxQueueFamilyIdx, info.prsntQueueFamilyIdx};
+	if (g_info.gfxQueue != g_info.prsntQueue) {
+		std::vector<uint32_t> indices = {g_info.gfxQueueFamilyIdx, g_info.prsntQueueFamilyIdx};
 		swapchainCreateInfo.setImageSharingMode(vk::SharingMode::eConcurrent)
 			.setQueueFamilyIndexCount((uint32_t)indices.size())
 			.setPQueueFamilyIndices(indices.data());
 	}
-	info.surfaceCapabilities = pSurfCap;
+	g_info.surfaceCapabilities = pSurfCap;
 
 	// Create the swapchain, clear old one, and create images and imageviews
-	info.swapchain = info.device.createSwapchainKHR(swapchainCreateInfo);
+	g_info.swapchain = g_info.device.createSwapchainKHR(swapchainCreateInfo);
 	if (oldSwapChain)
-		info.device.destroySwapchainKHR(oldSwapChain);
+		g_info.device.destroySwapchainKHR(oldSwapChain);
 
-	auto swapChainImages = info.device.getSwapchainImagesKHR(info.swapchain);
-	info.swapchainBuffers.resize(swapChainImages.size());
+	auto swapChainImages = g_info.device.getSwapchainImagesKHR(g_info.swapchain);
+	g_info.swapchainBuffers.resize(swapChainImages.size());
 	auto imageViewCreateInfo = vk::ImageViewCreateInfo()
 		.setViewType(vk::ImageViewType::e2D)
 		.setFormat(formats.at(0).format)
@@ -371,8 +372,8 @@ int setupSwapChains() {
 	// Initialize the images using the same info
 	for (uint32_t i = 0u; i < swapChainImages.size(); ++i) {
 		imageViewCreateInfo.setImage(swapChainImages[i]);
-		info.swapchainBuffers[i].image = swapChainImages[i];
-		info.swapchainBuffers[i].view = info.device.createImageView(imageViewCreateInfo);
+		g_info.swapchainBuffers[i].image = swapChainImages[i];
+		g_info.swapchainBuffers[i].view = g_info.device.createImageView(imageViewCreateInfo);
 	}
 
 	return 0;
@@ -380,33 +381,33 @@ int setupSwapChains() {
 
 int setupDepth() {
 	// Setup depth buffer
-	info.depth.format = vk::Format::eD16Unorm;
+	g_info.depth.format = vk::Format::eD16Unorm;
 	const auto depthImageInfo = vk::ImageCreateInfo()
-		.setFormat(info.depth.format)
+		.setFormat(g_info.depth.format)
 		.setImageType(vk::ImageType::e2D)
-		.setExtent({info.surfaceCapabilities.currentExtent.width, info.surfaceCapabilities.currentExtent.height, 1})
+		.setExtent({g_info.surfaceCapabilities.currentExtent.width, g_info.surfaceCapabilities.currentExtent.height, 1})
 		.setMipLevels(1)
 		.setArrayLayers(1)
 		.setSamples(vk::SampleCountFlagBits::e1)
 		.setUsage(vk::ImageUsageFlagBits::eDepthStencilAttachment);
-	info.depth.image = info.device.createImage(depthImageInfo);
+	g_info.depth.image = g_info.device.createImage(depthImageInfo);
 
 	// We need memory requirements from the GPU to allocate depth buffer memory
-	auto memReqs = info.device.getImageMemoryRequirements(info.depth.image);
+	auto memReqs = g_info.device.getImageMemoryRequirements(g_info.depth.image);
 	auto memAllocInfo = vk::MemoryAllocateInfo().setAllocationSize(memReqs.size).setMemoryTypeIndex(0);
 	const auto pass = memory_type_from_properties(memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eDeviceLocal, memAllocInfo.memoryTypeIndex);
 	assert(pass);
-	info.depth.mem = info.device.allocateMemory(memAllocInfo);
+	g_info.depth.mem = g_info.device.allocateMemory(memAllocInfo);
 	// Bind the memory to the depth buffer
-	info.device.bindImageMemory(info.depth.image, info.depth.mem, 0);
+	g_info.device.bindImageMemory(g_info.depth.image, g_info.depth.mem, 0);
 
 	// Create the Image View for the Depth Buffer, to describe how to use it
 	const auto depthBufferImageViewInfo = vk::ImageViewCreateInfo()
-		.setFormat(info.depth.format)
-		.setImage(info.depth.image)
+		.setFormat(g_info.depth.format)
+		.setImage(g_info.depth.image)
 		.setViewType(vk::ImageViewType::e2D)
 		.setSubresourceRange(vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1));
-	info.depth.view = info.device.createImageView(depthBufferImageViewInfo);
+	g_info.depth.view = g_info.device.createImageView(depthBufferImageViewInfo);
 
 	return 0;
 }
@@ -414,29 +415,29 @@ int setupDepth() {
 int setupUniformBuffer(void *data, size_t size) {
 	const auto buf_info = vk::BufferCreateInfo()
 		.setUsage(vk::BufferUsageFlagBits::eUniformBuffer).setSize(size);
-	const auto buffer = info.device.createBuffer(buf_info); // Create buffer object
+	const auto buffer = g_info.device.createBuffer(buf_info); // Create buffer object
 
 	// We need memory requirements from the GPU to allocate uniform buffer memory
-	auto memReqs = info.device.getBufferMemoryRequirements(buffer);
+	auto memReqs = g_info.device.getBufferMemoryRequirements(buffer);
 	auto memAllocInfo = vk::MemoryAllocateInfo().setAllocationSize(memReqs.size).setMemoryTypeIndex(0);
 	const auto pass = memory_type_from_properties(memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
 			memAllocInfo.memoryTypeIndex);
 	assert(pass && "No mappable, coherent memory");
-	const auto memory = info.device.allocateMemory(memAllocInfo);
+	const auto memory = g_info.device.allocateMemory(memAllocInfo);
 
 	// Write the actual uniform data to the buffer
-	const auto buf_data = info.device.mapMemory(memory, 0, memReqs.size);
+	const auto buf_data = g_info.device.mapMemory(memory, 0, memReqs.size);
 	memcpy(buf_data, data, size);
-	info.device.unmapMemory(memory); // Unmap the memory buffer ASAP
-	info.device.bindBufferMemory(buffer, memory,
+	g_info.device.unmapMemory(memory); // Unmap the memory buffer ASAP
+	g_info.device.bindBufferMemory(buffer, memory,
 			0); // Associate the allocated memory with the buffer object
 
 	// Save buffer info for later access
-	info.uniformData.buffer = buffer;
-	info.uniformData.mem = memory;
-	info.uniformData.bufferInfo.buffer = info.uniformData.buffer;
-	info.uniformData.bufferInfo.offset = 0;
-	info.uniformData.bufferInfo.range = size;
+	g_info.uniformData.buffer = buffer;
+	g_info.uniformData.mem = memory;
+	g_info.uniformData.bufferInfo.buffer = g_info.uniformData.buffer;
+	g_info.uniformData.bufferInfo.offset = 0;
+	g_info.uniformData.bufferInfo.range = size;
 
 	return 0;
 }
@@ -451,11 +452,11 @@ int setupDescriptorSetLayoutAndPipelineLayout() {
 		.setStageFlags(vk::ShaderStageFlagBits::eVertex);
 	const auto descriptorLayoutCreateInfo = vk::DescriptorSetLayoutCreateInfo().setBindingCount(1).setPBindings(&layoutBinding);
 	// Create descriptorLayout and save it in info object
-	const auto descriptorSetLayout = info.device.createDescriptorSetLayout(descriptorLayoutCreateInfo);
-	info.descriptorSetLayouts.push_back(descriptorSetLayout);
+	const auto descriptorSetLayout = g_info.device.createDescriptorSetLayout(descriptorLayoutCreateInfo);
+	g_info.descriptorSetLayouts.push_back(descriptorSetLayout);
 
 	const auto pipelineLayoutCreateInfo = vk::PipelineLayoutCreateInfo().setSetLayoutCount(numOfDescriptors).setPSetLayouts(&descriptorSetLayout);
-	info.pipelineLayout = info.device.createPipelineLayout(pipelineLayoutCreateInfo);
+	g_info.pipelineLayout = g_info.device.createPipelineLayout(pipelineLayoutCreateInfo);
 
 	/*
 	   In GLSL:
@@ -473,25 +474,25 @@ int setupDescriptorSetLayoutAndPipelineLayout() {
 int setupDescriptorSetPool() {
 	const auto typeCount = vk::DescriptorPoolSize().setType(vk::DescriptorType::eUniformBuffer).setDescriptorCount(1);
 	const auto descriptorPoolCreateInfo = vk::DescriptorPoolCreateInfo().setMaxSets(1).setPoolSizeCount(1).setPPoolSizes(&typeCount);
-	info.descriptorPool = info.device.createDescriptorPool(descriptorPoolCreateInfo);
+	g_info.descriptorPool = g_info.device.createDescriptorPool(descriptorPoolCreateInfo);
 
 	return 0;
 }
 
 int allocateDescriptorSet() {
 	const auto allocInfo = vk::DescriptorSetAllocateInfo()
-		.setDescriptorPool(info.descriptorPool)
-		.setDescriptorSetCount((uint32_t)info.descriptorSetLayouts.size())
-		.setPSetLayouts(info.descriptorSetLayouts.data());
-	info.descriptorSets = info.device.allocateDescriptorSets(allocInfo);
+		.setDescriptorPool(g_info.descriptorPool)
+		.setDescriptorSetCount((uint32_t)g_info.descriptorSetLayouts.size())
+		.setPSetLayouts(g_info.descriptorSetLayouts.data());
+	g_info.descriptorSets = g_info.device.allocateDescriptorSets(allocInfo);
 
 	const auto writes = std::vector<vk::WriteDescriptorSet>{vk::WriteDescriptorSet()
-		.setDstSet(info.descriptorSets.front())
-			.setDescriptorCount((uint32_t)info.descriptorSets.size())
+		.setDstSet(g_info.descriptorSets.front())
+			.setDescriptorCount((uint32_t)g_info.descriptorSets.size())
 			.setDescriptorType(vk::DescriptorType::eUniformBuffer)
-			.setPBufferInfo((const vk::DescriptorBufferInfo *)&info.uniformData.bufferInfo)};
+			.setPBufferInfo((const vk::DescriptorBufferInfo *)&g_info.uniformData.bufferInfo)};
 	// Copy the VkDescriptorBufferInfo into the descriptor (the device)
-	info.device.updateDescriptorSets(writes, nullptr);
+	g_info.device.updateDescriptorSets(writes, nullptr);
 
 	return 0;
 }
@@ -500,7 +501,7 @@ int initRenderPass() {
 	// Set up two attachments
 	const auto attachments = std::vector<vk::AttachmentDescription>{// The framebuffer (color) attachment
 		vk::AttachmentDescription()
-			.setFormat(info.surfaceFormat)
+			.setFormat(g_info.surfaceFormat)
 			.setSamples(vk::SampleCountFlagBits::e1)
 			.setLoadOp(vk::AttachmentLoadOp::eClear)
 			.setStoreOp(vk::AttachmentStoreOp::eStore)
@@ -510,7 +511,7 @@ int initRenderPass() {
 			.setFinalLayout(vk::ImageLayout::ePresentSrcKHR),
 			// The depth attachment
 			vk::AttachmentDescription()
-				.setFormat(info.depth.format)
+				.setFormat(g_info.depth.format)
 				.setSamples(vk::SampleCountFlagBits::e1)
 				.setLoadOp(vk::AttachmentLoadOp::eClear)
 				.setStoreOp(vk::AttachmentStoreOp::eDontCare)
@@ -538,7 +539,7 @@ int initRenderPass() {
 		.setPAttachments(attachments.data())
 		.setSubpassCount(1)
 		.setPSubpasses(&subpass);
-	info.renderPass = info.device.createRenderPass(renderPassCreateInfo);
+	g_info.renderPass = g_info.device.createRenderPass(renderPassCreateInfo);
 
 	return 0;
 }
@@ -563,11 +564,11 @@ int setupShaders() {
 
 	// Vertex shader
 	const auto vertexShaderModuleCreationInfo = vk::ShaderModuleCreateInfo().setCodeSize(vtx_spv.size() * sizeof(vtx_spv.front())).setPCode(vtx_spv.data());
-	const auto vertexShaderModule = info.device.createShaderModule(vertexShaderModuleCreationInfo);
+	const auto vertexShaderModule = g_info.device.createShaderModule(vertexShaderModuleCreationInfo);
 
 	// Fragment shader
 	const auto fragmentShaderModuleCreationInfo = vk::ShaderModuleCreateInfo().setCodeSize(frag_spv.size() * sizeof(frag_spv.front())).setPCode(frag_spv.data());
-	const auto fragmentShaderModule = info.device.createShaderModule(fragmentShaderModuleCreationInfo);
+	const auto fragmentShaderModule = g_info.device.createShaderModule(fragmentShaderModuleCreationInfo);
 
 	const auto pipelineStageShaderStageCreateInfo = std::vector<vk::PipelineShaderStageCreateInfo>{
 		// Vertex
@@ -575,30 +576,30 @@ int setupShaders() {
 			vk::PipelineShaderStageCreateInfo().setStage(vk::ShaderStageFlagBits::eFragment).setPName("main").setModule(fragmentShaderModule)};
 
 	// Save them for later when setting up the graphics pipeline
-	info.shaderStages = pipelineStageShaderStageCreateInfo;
+	g_info.shaderStages = pipelineStageShaderStageCreateInfo;
 
 	return 0;
 }
 
 int setupFrameBuffers() {
 	auto attachments = std::vector<vk::ImageView>(2);
-	attachments[1] = info.depth.view; // Set the second buffer to always be depth buffer
+	attachments[1] = g_info.depth.view; // Set the second buffer to always be depth buffer
 
 	const auto frameBufferCreateInfo = vk::FramebufferCreateInfo()
-		.setRenderPass(info.renderPass)
+		.setRenderPass(g_info.renderPass)
 		.setAttachmentCount(2)
 		.setPAttachments(attachments.data())
-		.setWidth(info.surfaceCapabilities.currentExtent.width)
-		.setHeight(info.surfaceCapabilities.currentExtent.height)
+		.setWidth(g_info.surfaceCapabilities.currentExtent.width)
+		.setHeight(g_info.surfaceCapabilities.currentExtent.height)
 		.setLayers(1);
 
-	info.framebuffers = std::vector<vk::Framebuffer>(info.swapchainBuffers.size());
+	g_info.framebuffers = std::vector<vk::Framebuffer>(g_info.swapchainBuffers.size());
 
-	for (unsigned int i = 0; i < info.framebuffers.size(); ++i) {
+	for (unsigned int i = 0; i < g_info.framebuffers.size(); ++i) {
 		// Set the first (fb) attachment to the buffer and then create the
 		// framebuffer (using the attachments)
-		attachments[0] = info.swapchainBuffers[i].view;
-		info.framebuffers[i] = info.device.createFramebuffer(frameBufferCreateInfo);
+		attachments[0] = g_info.swapchainBuffers[i].view;
+		g_info.framebuffers[i] = g_info.device.createFramebuffer(frameBufferCreateInfo);
 	}
 
 	return 0;
@@ -691,31 +692,31 @@ int createVertexBuffer() {
 		.setUsage(vk::BufferUsageFlagBits::eVertexBuffer)
 		.setSharingMode(vk::SharingMode::eExclusive)
 		.setSize(vertexData.size() * sizeof(vertexData.front()));
-	const auto buffer = info.device.createBuffer(bufferInfo);
+	const auto buffer = g_info.device.createBuffer(bufferInfo);
 
 	// We need memory requirements from the GPU to allocate vertex buffer memory
-	auto memReqs = info.device.getBufferMemoryRequirements(buffer);
+	auto memReqs = g_info.device.getBufferMemoryRequirements(buffer);
 	auto memAllocInfo = vk::MemoryAllocateInfo().setAllocationSize(memReqs.size).setMemoryTypeIndex(0);
 	const auto pass = memory_type_from_properties(memReqs.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
 			memAllocInfo.memoryTypeIndex);
 	assert(pass && "No mappable, coherent memory");
-	const auto memory = info.device.allocateMemory(memAllocInfo);
+	const auto memory = g_info.device.allocateMemory(memAllocInfo);
 
 	// Write the actual vertex data to the buffer
-	const auto bufferData = info.device.mapMemory(memory, 0, memReqs.size);
+	const auto bufferData = g_info.device.mapMemory(memory, 0, memReqs.size);
 	memcpy(bufferData, vertexData.data(), sizeof(vertexData.front()) * vertexData.size());
 
-	info.device.unmapMemory(memory); // Unmap the memory buffer ASAP
-	info.device.bindBufferMemory(buffer, memory,
+	g_info.device.unmapMemory(memory); // Unmap the memory buffer ASAP
+	g_info.device.bindBufferMemory(buffer, memory,
 			0); // Associate the allocated memory with the buffer object
-	info.vertexBufferData.buffer = buffer;
-	info.vertexBufferData.mem = memory;
+	g_info.vertexBufferData.buffer = buffer;
+	g_info.vertexBufferData.mem = memory;
 
 	// Save the vertex info for later setup of graphics pipeline
-	info.vertexBufferData.vertexInputDesc =
+	g_info.vertexBufferData.vertexInputDesc =
 		vk::VertexInputBindingDescription().setBinding(0).setInputRate(vk::VertexInputRate::eVertex).setStride((uint32_t)(sizeof(vertexData.front()) * 2.0f));
 
-	info.vertexBufferData.vertexInputAttribs = std::vector<vk::VertexInputAttributeDescription>{
+	g_info.vertexBufferData.vertexInputAttribs = std::vector<vk::VertexInputAttributeDescription>{
 		vk::VertexInputAttributeDescription().setBinding(0).setLocation(0).setFormat(vk::Format::eR32G32B32A32Sfloat).setOffset(0),
 			vk::VertexInputAttributeDescription().setBinding(0).setLocation(1).setFormat(vk::Format::eR32G32B32A32Sfloat).setOffset(sizeof(vertexData.front()))};
 
@@ -726,9 +727,9 @@ int setupPipelineStates() {
 	// Pipeline Vertex Input State
 	const auto vertexInputStateCreateInfo = vk::PipelineVertexInputStateCreateInfo()
 		.setVertexBindingDescriptionCount(1)
-		.setPVertexBindingDescriptions(&info.vertexBufferData.vertexInputDesc)
-		.setVertexAttributeDescriptionCount(info.vertexBufferData.vertexInputAttribs.size())
-		.setPVertexAttributeDescriptions(info.vertexBufferData.vertexInputAttribs.data());
+		.setPVertexBindingDescriptions(&g_info.vertexBufferData.vertexInputDesc)
+		.setVertexAttributeDescriptionCount(g_info.vertexBufferData.vertexInputAttribs.size())
+		.setPVertexAttributeDescriptions(g_info.vertexBufferData.vertexInputAttribs.data());
 
 	// Pipeline Vertex Input Assembly State (describes the mesh data)
 	const auto vertexInputAssemblyStateCreateInfo =
@@ -774,11 +775,11 @@ int setupPipelineStates() {
 	const auto pipelineMultisampleStateCreateInfo = vk::PipelineMultisampleStateCreateInfo();
 
 	vk::PipelineCacheCreateInfo pipelineCache;
-	info.pipelineCache = info.device.createPipelineCache(pipelineCache);
+	g_info.pipelineCache = g_info.device.createPipelineCache(pipelineCache);
 
 	// Create the pipeline from all the pipeline states
 	const auto graphicsPipelineCreateInfo = vk::GraphicsPipelineCreateInfo()
-		.setLayout(info.pipelineLayout)
+		.setLayout(g_info.pipelineLayout)
 		.setPVertexInputState(&vertexInputStateCreateInfo)
 		.setPInputAssemblyState(&vertexInputAssemblyStateCreateInfo)
 		.setPRasterizationState(&pipelineRasterStateCreateInfo)
@@ -787,11 +788,11 @@ int setupPipelineStates() {
 		.setPDynamicState(&dynamicStateCreateInfo)
 		.setPViewportState(&vpCreateStateInfo)
 		.setPDepthStencilState(&depthStencilState)
-		.setPStages(info.shaderStages.data())
-		.setStageCount(info.shaderStages.size())
-		.setRenderPass(info.renderPass);
+		.setPStages(g_info.shaderStages.data())
+		.setStageCount(g_info.shaderStages.size())
+		.setRenderPass(g_info.renderPass);
 
-	auto pipeline = info.device.createGraphicsPipeline(info.pipelineCache, graphicsPipelineCreateInfo);
+	auto pipeline = g_info.device.createGraphicsPipeline(g_info.pipelineCache, graphicsPipelineCreateInfo);
 
     switch ( pipeline.result )
     {
@@ -802,7 +803,7 @@ int setupPipelineStates() {
       default: assert( false );  // should never happen
     }
 
-	info.pipeline = pipeline.value;
+	g_info.pipeline = pipeline.value;
 
 	return 0;
 }
@@ -810,46 +811,46 @@ int setupPipelineStates() {
 std::pair<vk::Semaphore, vk::Fence> recordCommandBuffer() {
 	// Create semaphore for waiting for the previous frame
 	const auto imageAquiredSemaphoreCreateInfo = vk::SemaphoreCreateInfo();
-	const auto imageAquiredSemaphore = info.device.createSemaphore(imageAquiredSemaphoreCreateInfo);
+	const auto imageAquiredSemaphore = g_info.device.createSemaphore(imageAquiredSemaphoreCreateInfo);
 
 	// Get the index of the next available swapchain image
-	info.currentBuffer = info.device.acquireNextImageKHR(info.swapchain, UINT64_MAX, imageAquiredSemaphore, nullptr).value;
+	g_info.currentBuffer = g_info.device.acquireNextImageKHR(g_info.swapchain, UINT64_MAX, imageAquiredSemaphore, nullptr).value;
 
 	// Use the current CommandBuffer
-	auto &cmd = info.cmdBuffers.front();
+	auto &cmd = g_info.cmdBuffers.front();
 
 	// Begin the render pass
 	const auto clearValues =
 		std::vector<vk::ClearValue>{vk::ClearValue().setColor(std::array<float, 4>{0.2f, 0.2f, 0.2f, 0.2f}), vk::ClearValue().setDepthStencil({1.0f, 0})};
 	const auto renderPassBegin = vk::RenderPassBeginInfo()
-		.setRenderPass(info.renderPass)
-		.setFramebuffer(info.framebuffers[info.currentBuffer])
-		.setRenderArea({{0, 0}, info.surfaceCapabilities.currentExtent})
+		.setRenderPass(g_info.renderPass)
+		.setFramebuffer(g_info.framebuffers[g_info.currentBuffer])
+		.setRenderArea({{0, 0}, g_info.surfaceCapabilities.currentExtent})
 		.setClearValueCount(2)
 		.setPClearValues(clearValues.data());
 	cmd.beginRenderPass(renderPassBegin, vk::SubpassContents::eInline);
 
 	// Bind the pipeline to the command buffer
-	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, info.pipeline);
+	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_info.pipeline);
 
 	// Bind the descriptor sets
-	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, info.pipelineLayout, 0, info.descriptorSets.size(), info.descriptorSets.data(), 0, nullptr);
+	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_info.pipelineLayout, 0, g_info.descriptorSets.size(), g_info.descriptorSets.data(), 0, nullptr);
 	// cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-	// info.pipelineLayout, 0, info.descriptorSets);
+	// g_info.pipelineLayout, 0, g_info.descriptorSets);
 
 	// Bind the vertex buffer
-	cmd.bindVertexBuffers(0, info.vertexBufferData.buffer, {0});
+	cmd.bindVertexBuffers(0, g_info.vertexBufferData.buffer, {0});
 
 	// Set viewport and scissor
 	const auto viewport = vk::Viewport()
-		.setHeight(info.surfaceCapabilities.currentExtent.height)
-		.setWidth(info.surfaceCapabilities.currentExtent.width)
+		.setHeight(g_info.surfaceCapabilities.currentExtent.height)
+		.setWidth(g_info.surfaceCapabilities.currentExtent.width)
 		.setMinDepth(0.0f)
 		.setMaxDepth(1.0f)
 		.setX(0)
 		.setY(0);
 	cmd.setViewport(0, 1, &viewport);
-	const auto scissor = vk::Rect2D().setExtent(info.surfaceCapabilities.currentExtent).setOffset({0, 0});
+	const auto scissor = vk::Rect2D().setExtent(g_info.surfaceCapabilities.currentExtent).setOffset({0, 0});
 	cmd.setScissor(0, 1, &scissor);
 
 	// The actual draw command
@@ -862,7 +863,7 @@ std::pair<vk::Semaphore, vk::Fence> recordCommandBuffer() {
 
 	// First create a fence to know when the GPU is done
 	const auto fenceCreateInfo = vk::FenceCreateInfo();
-	const auto drawFence = info.device.createFence(fenceCreateInfo);
+	const auto drawFence = g_info.device.createFence(fenceCreateInfo);
 
 	// Then submit command buffer
 	vk::PipelineStageFlags pipelineStageFlags = vk::PipelineStageFlagBits::eColorAttachmentOutput;
@@ -870,21 +871,21 @@ std::pair<vk::Semaphore, vk::Fence> recordCommandBuffer() {
 		.setWaitSemaphoreCount(1)
 		.setPWaitSemaphores(&imageAquiredSemaphore)
 		.setCommandBufferCount(1)
-		.setPCommandBuffers(info.cmdBuffers.data())
+		.setPCommandBuffers(g_info.cmdBuffers.data())
 		.setPWaitDstStageMask(&pipelineStageFlags);
-	info.gfxQueue.submit(submitInfo, drawFence);
+	g_info.gfxQueue.submit(submitInfo, drawFence);
 
 	vk::Result res;
 	do {
-		res = info.device.waitForFences(drawFence, VK_TRUE, 1000000);
+		res = g_info.device.waitForFences(drawFence, VK_TRUE, 1000000);
 	} while (res == vk::Result::eTimeout);
 
 	return {imageAquiredSemaphore, drawFence};
 }
 
 void presentSwapChainImage() {
-	const auto presentInfo = vk::PresentInfoKHR().setSwapchainCount(1).setPSwapchains(&info.swapchain).setPImageIndices(&info.currentBuffer);
-	info.prsntQueue.presentKHR(presentInfo);
+	const auto presentInfo = vk::PresentInfoKHR().setSwapchainCount(1).setPSwapchains(&g_info.swapchain).setPImageIndices(&g_info.currentBuffer);
+	g_info.prsntQueue.presentKHR(presentInfo);
 }
 
 void destroy_pipeline(vkinfo &info) { info.device.destroyPipeline(info.pipeline); }
@@ -949,7 +950,7 @@ void destroy_instance(vkinfo &info) { info.inst.destroy(); }
 
 void destroy_window(vkinfo &info) {
 	info.inst.destroy(info.surface);
-	SDL_DestroyWindow(sdlinfo.window);
+	SDL_DestroyWindow(g_sdlinfo.window);
 }
 
 // void destroy_textures(vkinfo &info)
@@ -1029,24 +1030,24 @@ int main() {
 	}
 
 	// Clean up.
-	info.device.destroySemaphore(imageAcquiredSemaphore);
-	info.device.destroyFence(drawFence);
-	destroy_pipeline(info);
-	destroy_pipeline_cache(info);
-	destroy_descriptor_pool(info);
-	destroy_vertex_buffer(info);
-	destroy_framebuffers(info);
-	destroy_shaders(info);
-	destroy_renderpass(info);
-	destroy_descriptor_and_pipeline_layouts(info);
-	destroy_uniform_buffer(info);
-	destroy_depth_buffer(info);
-	destroy_swap_chain(info);
-	destroy_command_buffer(info);
-	destroy_command_pool(info);
-	destroy_device(info);
-	destroy_window(info);
-	destroy_instance(info);
+	g_info.device.destroySemaphore(imageAcquiredSemaphore);
+	g_info.device.destroyFence(drawFence);
+	destroy_pipeline(g_info);
+	destroy_pipeline_cache(g_info);
+	destroy_descriptor_pool(g_info);
+	destroy_vertex_buffer(g_info);
+	destroy_framebuffers(g_info);
+	destroy_shaders(g_info);
+	destroy_renderpass(g_info);
+	destroy_descriptor_and_pipeline_layouts(g_info);
+	destroy_uniform_buffer(g_info);
+	destroy_depth_buffer(g_info);
+	destroy_swap_chain(g_info);
+	destroy_command_buffer(g_info);
+	destroy_command_pool(g_info);
+	destroy_device(g_info);
+	destroy_window(g_info);
+	destroy_instance(g_info);
 
 	SDL_Quit();
 
