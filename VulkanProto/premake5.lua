@@ -5,13 +5,28 @@ solution "VulkanProto"
 	platforms { "x64" }
 	objdir("obj/" .. os.target() .. "/")
 	local sourcedir = "./"
+	local shaderdir = "./shaders/"
 
 	project "VulkanProto"
 		--kind "WindowedApp"
 		kind "ConsoleApp"
 		language "C++"
 		cppdialect "C++17"
+
+		-- C++/C
 		files { sourcedir .. "*.cpp", sourcedir .. "*.h" }
+		-- Shader files
+		files { shaderdir .. "*.glsl" }
+		
+		-- Filters for cxproj
+		vpaths {
+			["Headers"] = "**.h",
+			["Sources/*"] = {"**.c", "**.cpp"},
+			["Shaders"] = "**.glsl"
+		}
+
+		-- TODO: Bake SPV files from glsl
+		-- filter "files:**.glsl"
 
 		configuration "windows"
 			includedirs {"./include", "./include/freetype2","$(VULKAN_SDK)/include" }
