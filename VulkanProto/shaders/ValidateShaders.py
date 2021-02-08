@@ -13,9 +13,11 @@ __status__ = "Production"
 import os
 import re
 from optparse import OptionParser
-from subprocess import check_output
+from subprocess import run
 from subprocess import CalledProcessError
 from collections import namedtuple
+
+# colorama dependency
 from colorama import init, Fore, Style
 init()  # init colorama
 
@@ -147,7 +149,9 @@ def validate_shader(validation_command, shader_name, shader_code,
     failed_validation = 0
     break_validation = False
     try:
-        check_output(validation_command)
+        print(validation_command)
+        result = run(validation_command, shell=False, check=True, capture_output=True)
+        print(result.stdout)
     except (CalledProcessError) as exception:
         print('\nValidation of ' + shader_name +
               ' failed. ' + shader_file + ' :\n' + Style.BRIGHT +
@@ -157,7 +161,7 @@ def validate_shader(validation_command, shader_name, shader_code,
         failed_validation = 1
         if break_on_error:
             print("Break on error enabled. Bailing. \
-                   Temporary file is called" + shader_file)
+                   Temporary file is called " + shader_file)
             break_validation = True
     return (failed_validation, break_validation)
 
@@ -187,24 +191,38 @@ def validate_shaders(options, shader, failed_validation):
             options.break_on_error)
         failed_validation += failed
 
-    # Validate linking of all files together
-    validation_command.append('-V')
-    # Build list only of tmpshader names
+    # Build list only of tmpshader names and validate linking
     shader_files = [stage[1] for stage in arguments]
-    validation_command.extend(shader_files)
-    (failed, break_validation) = validate_shader(validation_command,
+    link_validation_command = validation_command[:]
+    link_validation_command.append('-l')
+    link_validation_command.extend(shader_files)
+    (failed, break_validation) = validate_shader(link_validation_command,
                                                  shader.name,
                                                  '',
                                                  'Linking stage',
                                                  options.break_on_error)
 
-    try:
-        # Clean-up temporary files
-        os.remove('tmpshader.vert')
-        os.remove('tmpshader.geom')
-        os.remove('tmpshader.frag')
-    except OSError as exception:
-        print('Unable to remove temporary files', exception.strerror)
+    # Create single SPIR-V module per file
+    for (shader_code, shader_file) in arguments:
+        spv_generation_command = validation_command[:]
+        spv_generation_command.append('-V')
+        spv_generation_command.append('-o')
+        spv_generation_command.append('./spv/' + os.path.splitext(shader.name)[0] + "." + os.path.splitext(shader_file)[1][1:] + '.spv')
+        spv_generation_command.append(shader_file)
+        (failed, break_validation) = validate_shader(spv_generation_command,
+                shader.name,
+                '',
+                'Generating SPIR-V binary',
+                options.break_on_error)
+
+    if not break_validation:
+        try:
+            # Clean-up temporary files
+            os.remove('tmpshader.vert')
+            os.remove('tmpshader.geom')
+            os.remove('tmpshader.frag')
+        except OSError as exception:
+            print('Unable to remove temporary files', exception.strerror)
 
     return (failed_validation, break_validation)
 
