@@ -14,6 +14,7 @@ import os
 import re
 import sys
 import argparse
+import logging
 from subprocess import run
 from subprocess import CalledProcessError
 from collections import namedtuple
@@ -110,9 +111,28 @@ def parse_cmd_arguments():
     parser.add_argument("-f", "--file", dest="file_name",
                         help="File to parse and compile",
                         metavar="FILE")
-
+    parser.add_argument("-d", "--debug", action="store_true",
+                        dest="debug",
+                        help="Print debug information to console",
+                        default=False)
     options = parser.parse_args()
     return options
+
+
+def setup_logging(options):
+    """ Setup logging to tty. """
+    # Logging format for logfile and console messages
+    # formatting = "%(asctime)s (%(process)d) %(levelname)s: %(message)s"
+    formatting = "%(message)s"
+
+    if options.debug:
+        logging.basicConfig(format=formatting, level=logging.DEBUG)
+    elif options.verbose:
+        logging.basicConfig(format=formatting, level=logging.INFO)
+    else:
+        logging.basicConfig(format=formatting, level=logging.CRITICAL)
+
+    logging.Formatter(formatting)
 
 
 def find_failing_lines(exception_message):
@@ -146,21 +166,21 @@ def run_command(validation_command, shader_name, shader_code,
     failed_validation = 0
     break_validation = False
     try:
-        print(validation_command)
+        logging.debug(validation_command)
         result = run(validation_command,
                      shell=False, check=True, text=True, capture_output=True)
         if len(result.stdout):
-            print(result.stdout)
+            logging.debug(result.stdout)
     except (CalledProcessError) as exception:
-        print('\nValidation of ' + shader_name +
-              ' failed. ' + shader_file + ' :\n' + Style.BRIGHT +
-              exception.output.strip().decode('ascii') + Style.RESET_ALL)
+        logging.info('\nValidation of', shader_name,
+                     'failed.', shader_file, ':\n', Style.BRIGHT,
+                     exception.output.strip().decode(), Style.RESET_ALL)
         print_shader(shader_code,
                      find_failing_lines(exception.output.strip()))
         failed_validation = 1
         if break_on_error:
-            print("Break on error enabled. Bailing. \
-                   Temporary file is called " + shader_file)
+            logging.info("Break on error enabled. Bailing. \
+                         Temporary file is called " + shader_file)
             break_validation = True
     return (failed_validation, break_validation)
 
@@ -220,7 +240,9 @@ def generate_spirv_stages(validation_command, shader_name,
         spv_stage_filename = shader_name + "." + shader_stage + '.spv'
         spv_stages.append(spv_stage_filename)
         spv_generation_command = validation_command[:]
-        spv_generation_command.extend(['-V', '-o', spv_stage_filename, shader_file])
+        spv_generation_command.extend(['-V',
+                                       '-o', spv_stage_filename,
+                                       shader_file])
         (failed, break_validation) = run_command(spv_generation_command,
                                                  shader.name,
                                                  '',
@@ -311,13 +333,15 @@ def validate_shaders(options, shader, shader_stages, failed_validation):
 
 def cleanup_temporary_files(files):
     """ Remove temporary shader stage files """
-    print('Deleting', files)
+    logging.debug('Deleting ' + ', '.join(files))
     try:
         # Clean-up temporary files
         for filename in files:
             os.remove(filename)
     except OSError as exception:
-        print('Unable to remove temporary files:', exception.strerror, exception.filename)
+        logging.debug('Unable to remove temporary files:',
+                      exception.strerror,
+                      exception.filename)
 
 
 def write_temporary_shader_stage_files(shader_stages):
@@ -331,8 +355,9 @@ def write_temporary_shader_stage_files(shader_stages):
 def do_main_program():
     """ Main program """
     options = parse_cmd_arguments()
+    setup_logging(options)
 
-    print("\nValidating GLSL Shaders using Khronos glslangValidator")
+    logging.info("\nValidating GLSL Shaders using Khronos glslangValidator")
     found_files = [""]
     if options.file_name:
         found_files = [options.file_name]
@@ -368,8 +393,8 @@ def do_main_program():
             break
         cleanup_temporary_files([stage[1] for stage in shader_stages])
 
-    print("\n" + str(validated) + " files in directory validated")
-    print(str(failed_validation) + " files failed validation")
+    logging.info("\n" + str(validated) + " files in directory validated")
+    logging.info(str(failed_validation) + " files failed validation")
     if failed_validation:
         sys.exit(-1)
 
@@ -379,4 +404,4 @@ try:
     if __name__ == "__main__":
         do_main_program()
 except KeyboardInterrupt:
-    print("Keyboard Interrupted!")
+    logging.critical("Keyboard Interrupted!")
