@@ -169,18 +169,18 @@ def run_command(validation_command, shader_name, shader_code,
         logging.debug(validation_command)
         result = run(validation_command,
                      shell=False, check=True, text=True, capture_output=True)
-        if len(result.stdout):
+        if len(result.stdout) > 0:
             logging.debug(result.stdout)
     except (CalledProcessError) as exception:
-        logging.info('\nValidation of', shader_name,
-                     'failed.', shader_file, ':\n', Style.BRIGHT,
-                     exception.output.strip().decode(), Style.RESET_ALL)
+        logging.info('\nValidation of' + shader_name +
+                     'failed.' + shader_file + ':\n' + Style.BRIGHT +
+                     exception.output.strip().decode() + Style.RESET_ALL)
         print_shader(shader_code,
                      find_failing_lines(exception.output.strip()))
         failed_validation = 1
         if break_on_error:
             logging.info("Break on error enabled. Bailing. \
-                         Temporary file is called " + shader_file)
+                         Temporary file is called %s", shader_file)
             break_validation = True
     return (failed_validation, break_validation)
 
@@ -333,13 +333,13 @@ def validate_shaders(options, shader, shader_stages, failed_validation):
 
 def cleanup_temporary_files(files):
     """ Remove temporary shader stage files """
-    logging.debug('Deleting ' + ', '.join(files))
+    logging.debug('Deleting %s', ', '.join(files))
     try:
         # Clean-up temporary files
         for filename in files:
             os.remove(filename)
     except OSError as exception:
-        logging.debug('Unable to remove temporary files:',
+        logging.debug('Unable to remove temporary files: %s %s',
                       exception.strerror,
                       exception.filename)
 
@@ -393,8 +393,8 @@ def do_main_program():
             break
         cleanup_temporary_files([stage[1] for stage in shader_stages])
 
-    logging.info("\n" + str(validated) + " files in directory validated")
-    logging.info(str(failed_validation) + " files failed validation")
+    logging.info("\n%s files in directory validated", str(validated))
+    logging.info("%s files failed validation", str(failed_validation))
     if failed_validation:
         sys.exit(-1)
 
