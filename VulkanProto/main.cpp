@@ -239,7 +239,13 @@ int setupDevicesAndQueues() {
 	// Iterate over each queue to learn whether it supports presenting:
 	std::vector<vk::Bool32> supportsPresent(queueFamilyProps.size());
 	for (uint32_t i = 0; i < queueFamilyProps.size(); ++i) {
-		g_info.gpu.getSurfaceSupportKHR(i, g_info.surface, &supportsPresent[i]);
+		auto result = g_info.gpu.getSurfaceSupportKHR(i, g_info.surface, &supportsPresent[i]);
+    if (result != vk::Result::eSuccess)
+    {
+      std::cout << "Could not find query surface support" << std::endl;
+      g_info.inst.destroy();
+      return 1;
+    }
 	}
 
 	uint32_t graphicsQueueFamilyIndex = UINT32_MAX;
@@ -414,7 +420,8 @@ int setupDepth() {
 
 int setupUniformBuffer(void *data, size_t size) {
 	const auto buf_info = vk::BufferCreateInfo()
-		.setUsage(vk::BufferUsageFlagBits::eUniformBuffer).setSize(size);
+		.setUsage(vk::BufferUsageFlagBits::eUniformBuffer)
+		.setSize(size);
 	const auto buffer = g_info.device.createBuffer(buf_info); // Create buffer object
 
 	// We need memory requirements from the GPU to allocate uniform buffer memory
@@ -559,21 +566,26 @@ std::vector<unsigned int> readShader(std::string filename) {
 }
 
 int setupShaders() {
-	const auto vtx_spv = readShader("vert.spv");
-	const auto frag_spv = readShader("frag.spv");
+	const auto vtx_spv = readShader("./shaders/spv/color.vert.spv");
+	const auto frag_spv = readShader("./shaders/spv/color.frag.spv");
 
 	// Vertex shader
-	const auto vertexShaderModuleCreationInfo = vk::ShaderModuleCreateInfo().setCodeSize(vtx_spv.size() * sizeof(vtx_spv.front())).setPCode(vtx_spv.data());
+	const auto vertexShaderModuleCreationInfo = vk::ShaderModuleCreateInfo()
+		.setCodeSize(vtx_spv.size() * sizeof(vtx_spv.front()))
+		.setPCode(vtx_spv.data());
 	const auto vertexShaderModule = g_info.device.createShaderModule(vertexShaderModuleCreationInfo);
 
 	// Fragment shader
-	const auto fragmentShaderModuleCreationInfo = vk::ShaderModuleCreateInfo().setCodeSize(frag_spv.size() * sizeof(frag_spv.front())).setPCode(frag_spv.data());
+	const auto fragmentShaderModuleCreationInfo = vk::ShaderModuleCreateInfo()
+		.setCodeSize(frag_spv.size() * sizeof(frag_spv.front()))
+		.setPCode(frag_spv.data());
 	const auto fragmentShaderModule = g_info.device.createShaderModule(fragmentShaderModuleCreationInfo);
 
 	const auto pipelineStageShaderStageCreateInfo = std::vector<vk::PipelineShaderStageCreateInfo>{
 		// Vertex
 		vk::PipelineShaderStageCreateInfo().setStage(vk::ShaderStageFlagBits::eVertex).setPName("main").setModule(vertexShaderModule),
-			vk::PipelineShaderStageCreateInfo().setStage(vk::ShaderStageFlagBits::eFragment).setPName("main").setModule(fragmentShaderModule)};
+		vk::PipelineShaderStageCreateInfo().setStage(vk::ShaderStageFlagBits::eFragment).setPName("main").setModule(fragmentShaderModule)
+	};
 
 	// Save them for later when setting up the graphics pipeline
 	g_info.shaderStages = pipelineStageShaderStageCreateInfo;
@@ -728,7 +740,7 @@ int setupPipelineStates() {
 	const auto vertexInputStateCreateInfo = vk::PipelineVertexInputStateCreateInfo()
 		.setVertexBindingDescriptionCount(1)
 		.setPVertexBindingDescriptions(&g_info.vertexBufferData.vertexInputDesc)
-		.setVertexAttributeDescriptionCount(g_info.vertexBufferData.vertexInputAttribs.size())
+		.setVertexAttributeDescriptionCount(static_cast<uint32_t>(g_info.vertexBufferData.vertexInputAttribs.size()))
 		.setPVertexAttributeDescriptions(g_info.vertexBufferData.vertexInputAttribs.data());
 
 	// Pipeline Vertex Input Assembly State (describes the mesh data)
@@ -747,7 +759,7 @@ int setupPipelineStates() {
 	const auto attachState = std::vector<vk::PipelineColorBlendAttachmentState>{vk::PipelineColorBlendAttachmentState().setColorWriteMask(
 			vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA)};
 	const auto pipelineColorBlendStateCreateInfo = vk::PipelineColorBlendStateCreateInfo()
-		.setAttachmentCount(attachState.size())
+		.setAttachmentCount(static_cast<uint32_t>(attachState.size()))
 		.setPAttachments(attachState.data())
 		.setLogicOp(vk::LogicOp::eNoOp)
 		.setBlendConstants({1.0f, 1.0f, 1.0f, 1.0f});
@@ -761,7 +773,9 @@ int setupPipelineStates() {
 	dynamicStates.push_back(vk::DynamicState::eViewport);
 	dynamicStates.push_back(vk::DynamicState::eScissor);
 	// Dynamic state, changeable by command buffer commands
-	auto dynamicStateCreateInfo = vk::PipelineDynamicStateCreateInfo().setDynamicStateCount(dynamicStates.size()).setPDynamicStates(dynamicStates.data());
+  auto dynamicStateCreateInfo = vk::PipelineDynamicStateCreateInfo()
+		.setDynamicStateCount(static_cast<uint32_t>(dynamicStates.size()))
+		.setPDynamicStates(dynamicStates.data());
 
 	// Pipeline Depth Stencil State
 	const auto depthStencilState = vk::PipelineDepthStencilStateCreateInfo()
@@ -789,7 +803,7 @@ int setupPipelineStates() {
 		.setPViewportState(&vpCreateStateInfo)
 		.setPDepthStencilState(&depthStencilState)
 		.setPStages(g_info.shaderStages.data())
-		.setStageCount(g_info.shaderStages.size())
+		.setStageCount(static_cast<uint32_t>(g_info.shaderStages.size()))
 		.setRenderPass(g_info.renderPass);
 
 	auto pipeline = g_info.device.createGraphicsPipeline(g_info.pipelineCache, graphicsPipelineCreateInfo);
@@ -834,7 +848,7 @@ std::pair<vk::Semaphore, vk::Fence> recordCommandBuffer() {
 	cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, g_info.pipeline);
 
 	// Bind the descriptor sets
-	cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_info.pipelineLayout, 0, g_info.descriptorSets.size(), g_info.descriptorSets.data(), 0, nullptr);
+  cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, g_info.pipelineLayout, 0, static_cast<uint32_t>(g_info.descriptorSets.size()), g_info.descriptorSets.data(), 0, nullptr);
 	// cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
 	// g_info.pipelineLayout, 0, g_info.descriptorSets);
 
@@ -843,8 +857,8 @@ std::pair<vk::Semaphore, vk::Fence> recordCommandBuffer() {
 
 	// Set viewport and scissor
 	const auto viewport = vk::Viewport()
-		.setHeight(g_info.surfaceCapabilities.currentExtent.height)
-		.setWidth(g_info.surfaceCapabilities.currentExtent.width)
+		.setHeight(static_cast<float>(g_info.surfaceCapabilities.currentExtent.height))
+		.setWidth(static_cast<float>(g_info.surfaceCapabilities.currentExtent.width))
 		.setMinDepth(0.0f)
 		.setMaxDepth(1.0f)
 		.setX(0)
@@ -885,7 +899,9 @@ std::pair<vk::Semaphore, vk::Fence> recordCommandBuffer() {
 
 void presentSwapChainImage() {
 	const auto presentInfo = vk::PresentInfoKHR().setSwapchainCount(1).setPSwapchains(&g_info.swapchain).setPImageIndices(&g_info.currentBuffer);
-	g_info.prsntQueue.presentKHR(presentInfo);
+	auto result = g_info.prsntQueue.presentKHR(presentInfo);
+  if (result == vk::Result::eErrorOutOfDateKHR)
+    setupSwapChains();
 }
 
 void destroy_pipeline(vkinfo &info) { info.device.destroyPipeline(info.pipeline); }
@@ -982,7 +998,10 @@ int main() {
 			glm::vec3(0, -1, 0));  // Head is up (set to 0,-1,0 to look upside-down)
 	const auto model = glm::mat4(1.0f);
 	// Vulkan clip space has inverted Y and half Z.
-	const auto clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f, 0.0f, 0.5f, 1.0f);
+	const auto clip = glm::mat4(1.0f, 0.0f, 0.0f, 0.0f, 
+															0.0f, -1.0f, 0.0f, 0.0f, 
+															0.0f, 0.0f, 0.5f, 0.0f, 
+															0.0f, 0.0f, 0.5f, 1.0f);
 	const auto mvp = clip * proj * view * model;
 
 	setupUniformBuffer((void *)&mvp, sizeof(mvp));

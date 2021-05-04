@@ -111,6 +111,10 @@ def parse_cmd_arguments():
     parser.add_argument("-f", "--file", dest="file_name",
                         help="File to parse and compile",
                         metavar="FILE")
+    parser.add_argument("-u", "--unify", action="store_true",
+                        dest="unify_into_one_file",
+                        help="Unify spv stages into one spv file",
+                        default=False)
     parser.add_argument("-d", "--debug", action="store_true",
                         dest="debug",
                         help="Print debug information to console",
@@ -235,9 +239,10 @@ def generate_spirv_stages(validation_command, shader_name,
     """ Create single SPIR-V module per file """
     failed_validation = 0
     spv_stages = []
+    spv_output_dir_name = './spv/'
     for shader_file in [stage[1] for stage in shader_stages]:
         shader_stage = os.path.splitext(shader_file)[1][1:]
-        spv_stage_filename = shader_name + "." + shader_stage + '.spv'
+        spv_stage_filename = spv_output_dir_name + shader_name + "." + shader_stage + '.spv'
         spv_stages.append(spv_stage_filename)
         spv_generation_command = validation_command[:]
         spv_generation_command.extend(['-V',
@@ -282,6 +287,9 @@ def generate_spirv_file(validation_command, shader, shader_stages, options):
 
     if break_validation:
         return (failed_validation, break_validation)
+
+    if not options.unify_into_one_file:
+        return (False, break_validation)
 
     # Link SPIR-V modules into one
     (failed_validation, break_validation) = link_spirv_stages(shader_name,
@@ -391,6 +399,7 @@ def do_main_program():
             failed_validation)
         if break_validation:
             break
+
         cleanup_temporary_files([stage[1] for stage in shader_stages])
 
     logging.info("\n%s files in directory validated", str(validated))
