@@ -29,7 +29,7 @@ solution "VulkanProto"
 		-- filter "files:**.glsl"
 
 		configuration "windows"
-			includedirs {"./include", "./include/freetype2","$(VULKAN_SDK)/include" }
+			includedirs {"./include", "$(VULKAN_SDK)/include" }
 			configuration "x64"
 				libdirs {"./lib/x64"}
 
